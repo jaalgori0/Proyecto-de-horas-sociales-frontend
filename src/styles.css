@@ -2005,6 +2005,59 @@ img {
   scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 }
 
+.modal-card-wide {
+  width: min(100%, 1120px);
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 32px 20px;
+}
+
+.modal-body-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+.modal-card-wide .modal-header {
+  flex: 0 0 auto;
+  margin-bottom: 20px;
+}
+
+.modal-card-wide .modal-header h2 {
+  font-size: 1.85rem;
+}
+
+.modal-card-wide .modal-footer {
+  flex: 0 0 auto;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(221, 227, 239, 0.9);
+}
+
+.modal-card-wide .form-grid {
+  gap: 18px 22px;
+}
+
+.modal-card-wide .field textarea {
+  min-height: 110px;
+}
+
+.modal-images-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.modal-images-grid .modal-image-field {
+  margin-top: 8px;
+}
+
 .modal-card::-webkit-scrollbar {
   width: 6px;
 }
@@ -4343,10 +4396,10 @@ input[type="checkbox"].check:checked {
 
 .student-assignment-row {
   display: grid;
-  grid-template-columns: 1fr !important;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
   align-items: end;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid #dbe4f3;
   border-radius: 16px;
   background: #f8fbff;
@@ -4387,6 +4440,10 @@ input[type="checkbox"].check:checked {
   .student-row-remove {
     width: 100%;
     height: 44px;
+  }
+
+  .modal-images-grid {
+    grid-template-columns: 1fr;
   }
 }
 
