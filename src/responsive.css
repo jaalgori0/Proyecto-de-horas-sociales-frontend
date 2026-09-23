@@ -533,6 +533,14 @@
   .student-assignment-row {
     grid-template-columns: 1fr !important;
   }
+
+  .modal-images-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .modal-card-wide {
+    padding: 18px !important;
+  }
 }
 
 /* ── Section headers & headings ──────────────────────────────── */

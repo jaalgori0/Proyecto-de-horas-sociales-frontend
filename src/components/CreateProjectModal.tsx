@@ -252,7 +252,7 @@ export default function CreateProjectModal({
       `}</style>
 
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Crear nuevo proyecto">
-        <form className="modal-card" onSubmit={handleSubmit}>
+        <form className="modal-card modal-card-wide" onSubmit={handleSubmit}>
 
           <div className="modal-header">
             <h2>Crear nuevo proyecto</h2>
@@ -377,6 +377,7 @@ export default function CreateProjectModal({
               </div>
             </div>
 
+            <div className="modal-images-grid">
             <div className="modal-image-field">
               <span className="modal-image-label">Imagen de la institución</span>
               {institutionPreviewUrl ? (
@@ -419,6 +420,7 @@ export default function CreateProjectModal({
                 </button>
               )}
               <input ref={projectFileInputRef} type="file" accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleProjectFileChange} required />
+            </div>
             </div>
 
             {error ? <p className="modal-error">{error}</p> : null}
