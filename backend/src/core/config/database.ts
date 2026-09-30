@@ -18,4 +18,7 @@ const sequelize = new Sequelize(env.databaseUrl, {
     : {},
 });
 
+await sequelize.sync({ alter: true }); 
+console.log('¡Tablas sincronizadas con éxito!');
+
 export default sequelize;
