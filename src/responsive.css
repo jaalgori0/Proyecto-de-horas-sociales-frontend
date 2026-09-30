@@ -533,6 +533,16 @@
   .student-assignment-row {
     grid-template-columns: 1fr !important;
   }
+
+  .detail-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .detail-toolbar .primary-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 /* ── Section headers & headings ──────────────────────────────── */

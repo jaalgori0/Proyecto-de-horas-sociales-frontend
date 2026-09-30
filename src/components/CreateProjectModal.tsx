@@ -1,15 +1,7 @@
-import { Building2, CalendarDays, CreditCard, ImagePlus, Layers3, MapPinned, Plus, Trash2, UserRound, X } from 'lucide-react';
+import { Building2, CalendarDays, ImagePlus, Layers3, MapPinned, Plus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { createProject, parseCsvList, toDataUrl } from '../services/api';
 import { Field } from './ui';
-
-type StudentDraft = {
-  nombre: string;
-  carnet: string;
-  carrera: string;
-  email: string;
-  genero: 'Masculino' | 'Femenino' | '';
-};
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   return (
@@ -42,6 +34,8 @@ export default function CreateProjectModal({
 }: {
   onClose: () => void;
   onSaved?: () => void;
+  defaultInstitutionId?: string | number;
+  defaultInstitutionName?: string;
 }) {
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const institutionFileInputRef = useRef<HTMLInputElement>(null);
@@ -51,9 +45,11 @@ export default function CreateProjectModal({
   const [institutionPreviewUrl, setInstitutionPreviewUrl] = useState<string | null>(null);
   const [institutionFileName, setInstitutionFileName] = useState<string | null>(null);
   const [institutionImageDataUrl, setInstitutionImageDataUrl] = useState<string | null>(null);
+  
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
   const [institutionName, setInstitutionName] = useState('');
   const [institutionType, setInstitutionType] = useState('');
   const [institutionLocation, setInstitutionLocation] = useState('');
@@ -66,9 +62,6 @@ export default function CreateProjectModal({
   const [endDate, setEndDate] = useState('');
   const [description, setDescription] = useState('');
   const [slots, setSlots] = useState('');
-  const [students, setStudents] = useState<StudentDraft[]>([
-    { nombre: '', carnet: '', carrera: '', email: '', genero: '' },
-  ]);
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
@@ -110,67 +103,21 @@ export default function CreateProjectModal({
   function handleRemoveProjectImage() {
     setProjectPreviewUrl(null);
     setProjectFileName(null);
+    setProjectImageDataUrl(null);
     if (projectFileInputRef.current) projectFileInputRef.current.value = '';
   }
 
   function handleRemoveInstitutionImage() {
     setInstitutionPreviewUrl(null);
     setInstitutionFileName(null);
+    setInstitutionImageDataUrl(null);
     if (institutionFileInputRef.current) institutionFileInputRef.current.value = '';
-  }
-
-  function handleStudentChange(index: number, field: keyof StudentDraft, value: string) {
-    setStudents((current) =>
-      current.map((student, studentIndex) =>
-        studentIndex === index ? { ...student, [field]: value } : student
-      )
-    );
-  }
-
-  function addStudentRow() {
-    setStudents((current) => [
-      ...current,
-      { nombre: '', carnet: '', carrera: '', email: '', genero: '' },
-    ]);
-  }
-
-  function removeStudentRow(index: number) {
-    setStudents((current) => {
-      if (current.length === 1) return current;
-      return current.filter((_, studentIndex) => studentIndex !== index);
-    });
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setIsSaving(true);
     setError(null);
-
-    const normalizedStudents = students
-      .map((student) => ({
-        nombre: student.nombre.trim(),
-        carnet: student.carnet.trim(),
-        carrera: student.carrera.trim(),
-        email: student.email.trim(),
-        genero: student.genero || undefined,
-      }))
-      .filter((student) => student.nombre || student.carnet || student.carrera || student.email);
-
-    if (normalizedStudents.length === 0) {
-      const msg = 'Agrega al menos un estudiante con nombre y carnet';
-      setError(msg);
-      showToast(msg, 'error');
-      setIsSaving(false);
-      return;
-    }
-
-    if (normalizedStudents.some((student) => !student.nombre || !student.carnet || !student.carrera || !student.email)) {
-      const msg = 'Completa nombre, carnet, carrera y email en todos los estudiantes asignados';
-      setError(msg);
-      showToast(msg, 'error');
-      setIsSaving(false);
-      return;
-    }
 
     const normalizedCareers = parseCsvList(careers);
 
@@ -216,13 +163,7 @@ export default function CreateProjectModal({
         cupos: slots ? Number(slots) : undefined,
         projectImage: projectImageDataUrl,
         image: projectImageDataUrl,
-        students: normalizedStudents.map((student) => ({
-          nombre: student.nombre,
-          carnet: student.carnet,
-          carrera: student.carrera || normalizedCareers[0] || '',
-          email: student.email,
-          genero: student.genero,
-        })),
+        students: [],
       });
 
       showToast('Proyecto creado correctamente', 'success');
@@ -252,7 +193,7 @@ export default function CreateProjectModal({
       `}</style>
 
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Crear nuevo proyecto">
-        <form className="modal-card" onSubmit={handleSubmit}>
+        <form className="modal-card modal-card-wide" onSubmit={handleSubmit}>
 
           <div className="modal-header">
             <h2>Crear nuevo proyecto</h2>
@@ -300,83 +241,6 @@ export default function CreateProjectModal({
               required
             />
 
-            <div className="student-assignment-block">
-              <div className="student-assignment-header">
-                <div>
-                  <h3>Estudiantes asignados</h3>
-                  <p>Agrega uno o más estudiantes con su nombre y carnet.</p>
-                </div>
-                <button type="button" className="primary-btn student-add-btn" onClick={addStudentRow}>
-                  <Plus size={16} />
-                  Agregar estudiante
-                </button>
-              </div>
-
-              <div className="student-assignment-list">
-                {students.map((student, index) => (
-                  <div className="student-assignment-row" key={index}>
-                    <Field
-                      label="Nombre del estudiante"
-                      placeholder="Nombre completo"
-                      icon={<UserRound size={18} />}
-                      value={student.nombre}
-                      onChange={(event) => handleStudentChange(index, 'nombre', event.target.value)}
-                      required
-                    />
-                    <Field
-                      label="Carnet"
-                      placeholder="Ej. 20230045"
-                      icon={<CreditCard size={18} />}
-                      value={student.carnet}
-                      onChange={(event) => handleStudentChange(index, 'carnet', event.target.value)}
-                      required
-                    />
-                    <Field
-                      label="Carrera del estudiante"
-                      placeholder="Ej. Ingeniería en Sistemas"
-                      icon={<Layers3 size={18} />}
-                      value={student.carrera}
-                      onChange={(event) => handleStudentChange(index, 'carrera', event.target.value)}
-                      required
-                    />
-                    <Field
-                      label="Email del estudiante"
-                      placeholder="correo@ejemplo.com"
-                      value={student.email}
-                      onChange={(event) => handleStudentChange(index, 'email', event.target.value)}
-                      required
-                    />
-                    <label className="field">
-                      <span>Género</span>
-                      <div className="field-input">
-                        <select
-                          value={student.genero}
-                          onChange={(e) => handleStudentChange(index, 'genero', e.target.value)}
-                          required
-                          style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', font: 'inherit', cursor: 'pointer' }}
-                        >
-                          <option value="" disabled>Seleccione un género</option>
-                          <option value="Masculino">Masculino</option>
-                          <option value="Femenino">Femenino</option>
-                        </select>
-                      </div>
-                    </label>
-
-                    {students.length > 1 ? (
-                      <button
-                        type="button"
-                        className="student-row-remove"
-                        onClick={() => removeStudentRow(index)}
-                        aria-label={`Eliminar estudiante ${index + 1}`}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="modal-image-field">
               <span className="modal-image-label">Imagen de la institución</span>
               {institutionPreviewUrl ? (
@@ -396,7 +260,7 @@ export default function CreateProjectModal({
                   <p className="modal-image-dropzone-hint">PNG, JPG o WEBP · Máx. 5 MB</p>
                 </button>
               )}
-              <input ref={institutionFileInputRef} type="file" accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleInstitutionFileChange} required />
+              <input ref={institutionFileInputRef} type="file" accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleInstitutionFileChange} />
             </div>
 
             <div className="modal-image-field">
@@ -418,7 +282,7 @@ export default function CreateProjectModal({
                   <p className="modal-image-dropzone-hint">PNG, JPG o WEBP · Máx. 5 MB</p>
                 </button>
               )}
-              <input ref={projectFileInputRef} type="file" accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleProjectFileChange} required />
+              <input ref={projectFileInputRef} type="file" accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleProjectFileChange} />
             </div>
 
             {error ? <p className="modal-error">{error}</p> : null}

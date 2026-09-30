@@ -1,5 +1,5 @@
-// Coordenadas aproximadas de las cabeceras departamentales / municipios de El Salvador
 export const coordenadasDepartamentos: Record<string, { lat: number; lng: number }> = {
+  // Departamentos principales
   'Ahuachapán':   { lat: 13.9214, lng: -89.8450 },
   'Santa Ana':    { lat: 13.9942, lng: -89.5597 },
   'Sonsonate':    { lat: 13.7186, lng: -89.7244 },
@@ -14,8 +14,24 @@ export const coordenadasDepartamentos: Record<string, { lat: number; lng: number
   'San Miguel':   { lat: 13.4833, lng: -88.1833 },
   'Morazán':      { lat: 13.7167, lng: -88.1167 },
   'La Unión':     { lat: 13.3367, lng: -87.8444 },
-  'Santa Tecla':  { lat: 13.6761, lng: -89.2965 },
-  'Soyapango':    { lat: 13.7167, lng: -89.1500 },
-  'Cojutepeque':  { lat: 13.7167, lng: -88.9333 },
-  'Zacatecoluca': { lat: 13.5000, lng: -88.8667 },
+
+  // Municipios y ciudades clave / universitarias / comerciales
+  'Santa Tecla':          { lat: 13.6761, lng: -89.2965 },
+  'Antiguo Cuscatlán':    { lat: 13.6778, lng: -89.2514 },
+  'Soyapango':            { lat: 13.7167, lng: -89.1500 },
+  'Ilopango':             { lat: 13.7039, lng: -89.1128 },
+  'Cojutepeque':          { lat: 13.7167, lng: -88.9333 },
+  'Zacatecoluca':         { lat: 13.5000, lng: -88.8667 },
+  'Sensuntepeque':        { lat: 13.8769, lng: -88.6278 },
+  'San Francisco Gotera': { lat: 13.6928, lng: -88.1039 },
+  'Metapán':              { lat: 14.4344, lng: -89.4444 },
+  'Acajutla':             { lat: 13.5928, lng: -89.8275 },
+  'La Libertad (Puerto)': { lat: 13.4889, lng: -89.5842 },
+  'Quezaltepeque':        { lat: 13.8342, lng: -89.4294 },
+  'Opico':                { lat: 13.8550, lng: -89.3983 },
+  'Apopa':                { lat: 13.7825, lng: -89.1764 },
+  'Mejicanos':            { lat: 13.7317, lng: -89.2294 },
+  'Tonacatepeque':        { lat: 13.7742, lng: -89.1083 },
+  'Colón':                { lat: 13.7228, lng: -89.3753 },
+  'San Marcos':           { lat: 13.6558, lng: -89.1831 }
 };

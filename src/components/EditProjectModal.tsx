@@ -177,7 +177,7 @@ export default function EditProjectModal({
       `}</style>
 
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Editar proyecto">
-        <form className="modal-card" onSubmit={handleSubmit}>
+        <form className="modal-card modal-card-wide" onSubmit={handleSubmit}>
           <div className="modal-header">
             <h2>Editar proyecto</h2>
             <button className="icon-btn small" type="button" onClick={onClose} aria-label="Cerrar modal">
@@ -202,6 +202,7 @@ export default function EditProjectModal({
 
             <Field label="Descripción del proyecto" placeholder="Describe los objetivos e impacto..." textarea value={description} onChange={(e) => setDescription(e.target.value)} required />
 
+            <div className="modal-images-grid">
             {/* Imagen institución */}
             <div className="modal-image-field">
               <span className="modal-image-label">Imagen de la institución (opcional)</span>
@@ -244,6 +245,7 @@ export default function EditProjectModal({
                 </button>
               )}
               <input ref={projectFileInputRef} type="file" accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleProjectFileChange} />
+            </div>
             </div>
 
             {error ? <p className="modal-error">{error}</p> : null}

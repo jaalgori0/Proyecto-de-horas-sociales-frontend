@@ -448,3 +448,19 @@ export async function deleteProject(projectId: string | number): Promise<void> {
     throw new Error((body as any)?.message ?? 'No se pudo eliminar el proyecto');
   }
 }
+
+export type CreateInstitutionPayload = {
+  nombre: string;
+  sigla: string;
+  ubicacion: string;
+  tipo?: string;
+  descripcion: string;
+  image_url?: string | null;
+};
+
+export function createInstitution(payload: CreateInstitutionPayload) {
+  return request('/institutions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

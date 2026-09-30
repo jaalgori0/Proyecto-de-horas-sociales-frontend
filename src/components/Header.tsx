@@ -1,6 +1,7 @@
 import { LogOut, MapPinned, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import type { AuthUser } from '../services/api';
 
 const navItems = [
   { to: '/mapa', label: 'Vista de mapa' },
@@ -10,7 +11,18 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
 ];
 
-export default function Header({ activePage }: { activePage: string }) {
+function getUserInitials(user: AuthUser | null): string {
+  if (!user) return "US"; 
+  const firstInitial = user.nombre ? user.nombre.charAt(0) : "";
+  const lastInitial = user.apellido ? user.apellido.charAt(0) : "";
+  return (firstInitial + lastInitial).toUpperCase() || "US";
+}
+interface HeaderProps {
+  activePage: string;
+  user: AuthUser | null;
+}
+
+export default function Header({ activePage, user }: HeaderProps){
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
@@ -54,7 +66,7 @@ export default function Header({ activePage }: { activePage: string }) {
             aria-label="Abrir menú de cuenta"
             onClick={() => setMenuOpen(!menuOpen)}
           >
-            <span>AM</span>
+            <span>{getUserInitials(user)}</span>
           </button>
           {menuOpen && (
             <div className="avatar-dropdown">

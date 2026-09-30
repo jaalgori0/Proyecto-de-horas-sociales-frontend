@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "clean": "rimraf dist",
+    "clean": "node -e \"const fs = require('fs'); fs.rmSync('dist', { recursive: true, force: true });\"",
     "build": "npm run clean && tsc -p tsconfig.json",
-    "start": "node dist/database/migrate.js up && node dist/index.js",
+    "start": "node dist/index.js",
     "migrate:run": "tsx src/database/migrate.ts up",
     "migrate:revert": "tsx src/database/migrate.ts down",
     "db:migrate": "npm run migrate:run",

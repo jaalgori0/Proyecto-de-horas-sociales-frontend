@@ -69,9 +69,9 @@ async function resolveInstitution(body: Record<string, unknown>, transaction: Tr
   }
 
   // ── Caso 2: sin institutionId → buscar por nombre exacto (ignoring case) o crear
-  if (!institutionName) {
-    throw new HttpError(400, 'Missing required fields: institutionName');
-  }
+  //if (!institutionName) {
+ //   throw new HttpError(400, 'Missing required fields: institutionName');
+ // }
 
   const existingInstitution = await Institution.findOne({
     where: where(fn('LOWER', col('nombre')), institutionName.toLowerCase()),
@@ -529,9 +529,9 @@ class ProjectsService {
       throw new HttpError(400, 'Missing required fields: carreras');
     }
 
-    if (students.length === 0) {
-      throw new HttpError(400, 'Missing required fields: students');
-    }
+    //if (students.length === 0) {
+    //  throw new HttpError(400, 'Missing required fields: students');
+    //}
 
     const transaction = await sequelize.transaction();
     try {

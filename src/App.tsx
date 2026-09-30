@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import LoginPage from './pages/LoginPage';
@@ -7,11 +8,17 @@ import { InstitucionesPage, InstitucionDetallePage } from './pages/Instituciones
 import { ProyectosPage, ProyectoDetallePage } from './pages/ProyectosPage';
 import EstudiantesPage from './pages/EstudiantesPage';
 import DashboardPage from './pages/DashboardPage';
+import type { AuthUser } from './services/api';
 
 function Shell({ activePage }: { activePage: string }) {
+  const [user] = useState<AuthUser | null>(() => {
+    const saved = localStorage.getItem('auth_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   return (
     <div className="app-shell">
-      <Header activePage={activePage} />
+      <Header activePage={activePage} user={user} />
       <main>
         <Routes>
           <Route path="/mapa" element={<MapaVistaPage />} />
@@ -37,7 +44,7 @@ export default function App() {
       <Route path="/" element={<Navigate to="/login/estudiante" replace />} />
       <Route path="/login/docente" element={<LoginPage tipo="docente" />} />
       <Route path="/login/estudiante" element={<LoginPage tipo="estudiante" />} />
-         <Route path="/register" element={<RegisterPage />} /> {/*  */}
+      <Route path="/register" element={<RegisterPage />} />
       <Route path="/*" element={<Shell activePage={activePage} />} />
     </Routes>
   );
