@@ -193,7 +193,7 @@ export default function CreateProjectModal({
       `}</style>
 
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Crear nuevo proyecto">
-        <form className="modal-card" onSubmit={handleSubmit}>
+        <form className="modal-card modal-card-wide" onSubmit={handleSubmit}>
 
           <div className="modal-header">
             <h2>Crear nuevo proyecto</h2>
