@@ -1,4 +1,4 @@
-import { MapPinned, Pencil, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { MapPinned, Pencil, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import EditInstitutionModal from '../components/EditInstitutionModal';
