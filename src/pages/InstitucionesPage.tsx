@@ -1,6 +1,7 @@
-import { MapPinned, Search, SlidersHorizontal } from 'lucide-react';
+import { MapPinned, Pencil, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import EditInstitutionModal from '../components/EditInstitutionModal';
 import InstitutionCard from '../components/InstitutionCard';
 import { BackLink } from '../components/ui';
 import { instituciones } from '../data/instituciones';
@@ -270,6 +271,7 @@ export function InstitucionDetallePage() {
   const [institution, setInstitution] = useState<InstitutionDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showEdit, setShowEdit] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -341,8 +343,25 @@ export function InstitucionDetallePage() {
 
   return (
     <div className="detail-page wide-page">
-      <BackLink to="/instituciones" label="Volver a instituciones" />
+      <div className="detail-toolbar">
+        <BackLink to="/instituciones" label="Volver a instituciones" />
+        <button className="primary-btn" type="button" onClick={() => setShowEdit(true)}>
+          <Pencil size={16} />
+          <span>Editar institución</span>
+        </button>
+      </div>
       {error ? <p className="muted">{error}</p> : null}
+
+      {showEdit ? (
+        <EditInstitutionModal
+          institution={institution}
+          onClose={() => setShowEdit(false)}
+          onSaved={(updated) => {
+            setInstitution(updated);
+            setError('');
+          }}
+        />
+      ) : null}
 
       <section className="institution-hero">
         <div className="checker-bg" />

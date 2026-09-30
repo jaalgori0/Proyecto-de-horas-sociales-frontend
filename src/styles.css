@@ -3686,6 +3686,14 @@ input[type="checkbox"].check:checked {
   width: fit-content;
 }
 
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 /* Full-page project detail view */
 .detail-page {
   display: flex;
