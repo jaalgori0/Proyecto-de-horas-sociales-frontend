@@ -1,6 +1,7 @@
 import { app } from './core/server/app.js';
 import { env } from './core/config/env.js';
 import sequelize from './core/config/database.js';
+import './models/index.js';
 
 const MAX_PORT_RETRIES = 10;
 
@@ -9,6 +10,10 @@ async function startServer(port: number, retriesLeft = MAX_PORT_RETRIES) {
     // Verificar conexión
     await sequelize.authenticate();
     console.log('Database connected');
+
+    // 2. Sincroniza las tablas en la base de datos antes de levantar el servidor
+    await sequelize.sync({ alter: true });
+    console.log('¡Tablas sincronizadas con éxito!');
 
     const server = app.listen(port, () => {
       console.log(`Horas Sociales API running on http://localhost:${port}`);
