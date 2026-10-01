@@ -5,6 +5,8 @@ import Student from './student.model.js';
 import ProjectEnrollment from './enrollment.model.js';
 import MapMarker from './marker.model.js';
 import User from './user.model.js'; 
+import Faculty from './faculty.model.js';
+import Career from './career.model.js';
 
 const models = {
   Institution,
@@ -12,7 +14,9 @@ const models = {
   Student,
   ProjectEnrollment,
   MapMarker,
-  User, 
+  User,
+  Faculty,
+  Career,
 };
 
 Object.values(models).forEach((model) => {
