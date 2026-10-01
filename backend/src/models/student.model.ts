@@ -66,6 +66,7 @@ Student.init(
     email: {
       type: DataTypes.TEXT,
       allowNull: true,
+      unique: true,
     },
     created_at: {
       type: DataTypes.DATE,
