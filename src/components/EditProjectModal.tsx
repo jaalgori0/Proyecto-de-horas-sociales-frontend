@@ -1,8 +1,8 @@
 import { Building2, CalendarDays, ImagePlus, Layers3, MapPinned, Plus, X } from 'lucide-react';
-import { useRef, useState } from 'react';
-import { toDataUrl, parseCsvList, updateProject } from '../services/api';
+import { useEffect, useRef, useState } from 'react';
+import { toDataUrl, updateProject, getFaculties, getCareers } from '../services/api';
 import { Field } from './ui';
-import type { ProjectDetailResponse } from '../services/api';
+import type { ProjectDetailResponse, FacultyResponse, CareerResponse } from '../services/api';
 import { Trash2, Pencil } from 'lucide-react';
 import EditStudentModal, { type EnrolledStudent } from './EditStudentModal';
 import { removeEnrollment, updateStudentEnrollment } from '../services/api';
@@ -60,19 +60,67 @@ export default function EditProjectModal({
     (project.estudiantes ?? []) as EnrolledStudent[]
   );
 
+  // Catálogos para Facultades y Carreras
+  const [faculties, setFaculties] = useState<FacultyResponse[]>([]);
+  const [careersList, setCareersList] = useState<CareerResponse[]>([]);
+  
   // Campos pre-rellenos con datos actuales del proyecto
   const [institutionName, setInstitutionName] = useState(project.institution ?? '');
   const [institutionType, setInstitutionType] = useState((project as any).institutionTipo ?? '');
   const [institutionLocation, setInstitutionLocation] = useState(project.ubicacion ?? '');
   const [institutionDescription, setInstitutionDescription] = useState((project as any).institutionDescripcion ?? '');
-  const [faculty, setFaculty] = useState(project.facultad ?? '');
-  const [careers, setCareers] = useState((project.carreras ?? []).join(', '));
+  
+  const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
+  const [selectedCareerIds, setSelectedCareerIds] = useState<string[]>([]);
+
   const [title, setTitle] = useState(project.titulo ?? project.nombre ?? '');
   const [location, setLocation] = useState(project.ubicacion ?? '');
   const [startDate, setStartDate] = useState(project.fechaInicio?.slice(0, 10) ?? '');
   const [endDate, setEndDate] = useState(project.fechaCierre?.slice(0, 10) ?? '');
   const [description, setDescription] = useState(project.descripcion ?? project.resumen ?? '');
   const [slots, setSlots] = useState(project.cuposTotales != null ? String(project.cuposTotales) : '');
+
+  // Cargar facultades y carreras al montar
+  useEffect(() => {
+    async function loadCatalogs() {
+      try {
+        const [facs, cars] = await Promise.all([getFaculties(), getCareers()]);
+        setFaculties(facs);
+        setCareersList(cars);
+
+        // 1. Encontrar la facultad que coincide con el proyecto (por ID o por Nombre)
+        const projectFacultyName = (project as any).facultad || project.facultad || '';
+        const matchedFaculty = facs.find(
+          (f) => String(f.id) === String((project as any).facultyId) || f.nombre.trim().toLowerCase() === projectFacultyName.trim().toLowerCase()
+        );
+
+        if (matchedFaculty) {
+          setSelectedFacultyId(String(matchedFaculty.id));
+
+          // 2. Encontrar las carreras del proyecto que coincidan con esta facultad
+          const projectCareersNames: string[] = (project as any).carreras || project.carreras || [];
+          const matchedCareerIds = cars
+            .filter(
+              (c) =>
+                String(c.faculty_id) === String(matchedFaculty.id) &&
+                projectCareersNames.some((pName) => pName.trim().toLowerCase() === c.nombre.trim().toLowerCase())
+            )
+            .map((c) => String(c.id));
+
+          setSelectedCareerIds(matchedCareerIds);
+        }
+      } catch (err) {
+        console.error('Error cargando catálogos', err);
+      }
+    }
+    void loadCatalogs();
+  }, [project]);
+
+  const filteredCareers = careersList.filter(
+    (c) => !selectedFacultyId || String(c.faculty_id) === String(selectedFacultyId)
+  );
+
+  const currentFacultyName = faculties.find(f => String(f.id) === String(selectedFacultyId))?.nombre || project.facultad || '';
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
@@ -104,14 +152,18 @@ export default function EditProjectModal({
     setIsSaving(true);
     setError(null);
 
-    const normalizedCareers = parseCsvList(careers);
-    if (normalizedCareers.length === 0) {
+    if (selectedCareerIds.length === 0) {
       const msg = 'Agrega al menos una carrera';
       setError(msg);
       showToast(msg, 'error');
       setIsSaving(false);
       return;
     }
+
+    // Obtener los nombres de las carreras seleccionadas para mantener compatibilidad
+    const careerNames = careersList
+      .filter((c) => selectedCareerIds.includes(String(c.id)))
+      .map((c) => c.nombre);
 
     try {
       await updateProject(project.id, {
@@ -121,8 +173,8 @@ export default function EditProjectModal({
         institutionLocation,
         institutionDescription,
         institutionImage: institutionImageDataUrl,
-        facultad: faculty,
-        carreras: normalizedCareers,
+        facultad: currentFacultyName,
+        carreras: careerNames,
         titulo: title,
         ubicacion: location,
         descripcion: description,
@@ -191,8 +243,129 @@ export default function EditProjectModal({
               <Field label="Tipo de institución" placeholder="Ej. Universidad pública, privada" value={institutionType} onChange={(e) => setInstitutionType(e.target.value)} />
               <Field label="Ubicación de la institución" placeholder="Ej. San Salvador" icon={<MapPinned size={18} />} value={institutionLocation} onChange={(e) => setInstitutionLocation(e.target.value)} required />
               <Field label="Descripción de la institución" placeholder="Describe brevemente la institución..." textarea value={institutionDescription} onChange={(e) => setInstitutionDescription(e.target.value)} />
-              <Field label="Facultad" placeholder="Ej. Arquitectura e Ingeniería" icon={<Layers3 size={18} />} value={faculty} onChange={(e) => setFaculty(e.target.value)} />
-              <Field label="Carreras que pueden aplicar" placeholder="Ej. Ingeniería en Sistemas, Arquitectura" icon={<Layers3 size={18} />} value={careers} onChange={(e) => setCareers(e.target.value)} textarea required />
+              
+              {/* Select de Facultad */}
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '0.375rem', 
+                padding: '0.75rem 1rem', 
+                borderRadius: '0.75rem', 
+                border: '1px solid #e2e8f0', 
+                backgroundColor: '#ffffff' 
+              }}>
+                <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e293b' }}>
+                  Facultad <span style={{ color: '#e53e3e' }}>*</span>
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <span style={{ position: 'absolute', left: '0rem', color: '#9ca3af', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                    <Layers3 size={18} />
+                  </span>
+                  <select
+                    style={{ 
+                      width: '100%', 
+                      paddingLeft: '2rem', 
+                      paddingRight: '1.5rem', 
+                      paddingTop: '0.375rem', 
+                      paddingBottom: '0.375rem', 
+                      backgroundColor: 'transparent', 
+                      border: 'none', 
+                      fontSize: '0.9375rem', 
+                      color: '#1a202c', 
+                      outline: 'none', 
+                      appearance: 'none', 
+                      cursor: 'pointer' 
+                    }}
+                    value={selectedFacultyId}
+                    onChange={(e) => {
+                      setSelectedFacultyId(e.target.value);
+                      setSelectedCareerIds([]); // Limpiar carreras al cambiar facultad
+                    }}
+                    required
+                  >
+                    <option value="">Selecciona una facultad...</option>
+                    {faculties.map((f) => (
+                      <option key={f.id} value={f.id}>{f.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Checkboxes de Carreras */}
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '0.5rem', 
+                padding: '0.75rem 1rem', 
+                borderRadius: '0.75rem', 
+                border: '1px solid #e2e8f0', 
+                backgroundColor: '#ffffff' 
+              }}>
+                <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e293b' }}>
+                  Carreras que pueden aplicar <span style={{ color: '#e53e3e' }}>*</span>
+                </label>
+                
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <span style={{ color: '#9ca3af', display: 'flex', alignItems: 'center', marginTop: '0.125rem', pointerEvents: 'none' }}>
+                    <Layers3 size={18} />
+                  </span>
+
+                  <div style={{ 
+                    width: '100%', 
+                    maxHeight: '130px', 
+                    overflowY: 'auto', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '0.5rem',
+                    paddingRight: '0.25rem'
+                  }}>
+                    {!selectedFacultyId ? (
+                      <span style={{ fontSize: '0.9375rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                        Primero selecciona una facultad
+                      </span>
+                    ) : filteredCareers.length === 0 ? (
+                      <span style={{ fontSize: '0.9375rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                        No hay carreras disponibles para esta facultad
+                      </span>
+                    ) : (
+                      filteredCareers.map((c) => {
+                        const stringId = String(c.id);
+                        const isChecked = selectedCareerIds.includes(stringId);
+                        return (
+                          <label 
+                            key={c.id} 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '0.5rem', 
+                              fontSize: '0.9375rem', 
+                              color: '#1a202c', 
+                              cursor: 'pointer',
+                              userSelect: 'none'
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              value={stringId}
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCareerIds([...selectedCareerIds, stringId]);
+                                } else {
+                                  setSelectedCareerIds(selectedCareerIds.filter(id => id !== stringId));
+                                }
+                              }}
+                              style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#2563eb' }}
+                            />
+                            {c.nombre}
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <Field label="Nombre del proyecto" placeholder="Ej. Campaña de salud comunitaria" icon={<Plus size={18} />} value={title} onChange={(e) => setTitle(e.target.value)} required />
               <Field label="Ubicación" placeholder="Municipio / departamento" icon={<MapPinned size={18} />} value={location} onChange={(e) => setLocation(e.target.value)} required />
               <Field label="Fecha de inicio" placeholder="" type="date" icon={<CalendarDays size={18} />} value={startDate} onChange={(e) => setStartDate(e.target.value)} />

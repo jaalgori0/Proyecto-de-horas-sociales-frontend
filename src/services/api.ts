@@ -464,3 +464,23 @@ export function createInstitution(payload: CreateInstitutionPayload) {
     body: JSON.stringify(payload),
   });
 }
+
+export type FacultyResponse = {
+  id: number | string;
+  nombre: string;
+};
+
+export type CareerResponse = {
+  id: number | string;
+  nombre: string;
+  faculty_id: number | string;
+};
+
+// Peticiones para Facultades y Carreras
+export function getFaculties() {
+  return request<FacultyResponse[]>('/faculties');
+}
+
+export function getCareers() {
+  return request<CareerResponse[]>('/careers');
+}
