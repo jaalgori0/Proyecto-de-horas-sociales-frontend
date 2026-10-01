@@ -91,6 +91,12 @@ ProjectEnrollment.init(
     timestamps: true,
     createdAt: 'created_at',
     updatedAt: false,
+    indexes: [
+      {
+        unique: true,
+        fields: ['project_id', 'student_id'], // <-- Esto le dice a Postgres que cree la restricción única requerida
+      },
+    ],
   }
 );
 
