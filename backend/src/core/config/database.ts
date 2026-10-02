@@ -2,8 +2,9 @@ import { Sequelize } from 'sequelize';
 import { env } from './env.js';
 
 const isProduction = env.nodeEnv === 'production';
-const isRemoteDb   = !env.databaseUrl.includes('localhost') && !env.databaseUrl.includes('127.0.0.1');
-const needsSsl     = isProduction || isRemoteDb;
+const isLocal = env.databaseUrl.includes('localhost') || env.databaseUrl.includes('127.0.0.1') || env.databaseUrl.includes('@db');
+
+const needsSsl = isProduction && !isLocal;
 
 const sequelize = new Sequelize(env.databaseUrl, {
   dialect: 'postgres',

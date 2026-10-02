@@ -3,17 +3,21 @@ import { useState } from 'react';
 import { enrollStudent } from '../services/api';
 import { Field } from './ui';
 
+interface InscribirEstudianteModalProps {
+  projectTitle: string;
+  projectId: string;
+  carrerasPermitidas?: string[]; 
+  onClose: () => void;
+  onEnrolled?: (updatedProject?: any) => void;
+}
+
 export default function InscribirEstudianteModal({
   projectTitle,
   projectId,
+  carrerasPermitidas = [],
   onClose,
   onEnrolled,
-}: {
-  projectTitle: string;
-  projectId: string;
-  onClose: () => void;
-  onEnrolled?: (updatedProject?: any) => void;
-}) {
+}: InscribirEstudianteModalProps) {
   const [name, setName] = useState('');
   const [carnet, setCarnet] = useState('');
   const [career, setCareer] = useState('');
@@ -24,6 +28,12 @@ export default function InscribirEstudianteModal({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    if (!career) {
+      setError('Por favor seleccione una carrera.');
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
 
@@ -63,10 +73,54 @@ export default function InscribirEstudianteModal({
         </div>
 
         <div className="form-grid">
-          <Field label="Nombre del estudiante" placeholder="Nombre completo" icon={<UserRound size={18} />} value={name} onChange={(event) => setName(event.target.value)} />
-          <Field label="Carnet" placeholder="Ej. 20230045" icon={<CreditCard size={18} />} value={carnet} onChange={(event) => setCarnet(event.target.value)} />
-          <Field label="Carrera" placeholder="Ej. Ingeniería en Sistemas" icon={<GraduationCap size={18} />} value={career} onChange={(event) => setCareer(event.target.value)} />
-          <Field label="Email (opcional)" placeholder="estudiante@ejemplo.edu.sv" icon={<UserRound size={18} />} value={email} onChange={(event) => setEmail(event.target.value)} />
+          <Field 
+            label="Nombre del estudiante" 
+            placeholder="Nombre completo" 
+            icon={<UserRound size={18} />} 
+            value={name} 
+            onChange={(event) => setName(event.target.value)} 
+          />
+          
+          <Field 
+            label="Carnet" 
+            placeholder="Ej. 20230045" 
+            icon={<CreditCard size={18} />} 
+            value={carnet} 
+            onChange={(event) => setCarnet(event.target.value)} 
+          />
+
+          {/* Menú desplegable estrictamente limitado a las carreras del proyecto */}
+          <div className="field-wrapper">
+            <label className="field-label">Carrera autorizada</label>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{ position: 'absolute', left: '12px', color: '#687182', display: 'flex', pointerEvents: 'none', zIndex: 10 }}>
+                <GraduationCap size={18} />
+              </span>
+              <select
+                value={career}
+                onChange={(e) => setCareer(e.target.value)}
+                className="field-input"
+                style={{ paddingLeft: '38px', width: '100%', appearance: 'auto' }}
+                required
+              >
+                <option value="">Seleccione una carrera...</option>
+                {carrerasPermitidas.map((carreraOption) => (
+                  <option key={carreraOption} value={carreraOption}>
+                    {carreraOption}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <Field 
+            label="Email (opcional)" 
+            placeholder="estudiante@ejemplo.edu.sv" 
+            icon={<UserRound size={18} />} 
+            value={email} 
+            onChange={(event) => setEmail(event.target.value)} 
+          />
+
           <div className="field-wrapper">
             <label className="field-label">Género</label>
             <select
