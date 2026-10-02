@@ -34,7 +34,7 @@ services:
       db:
         condition: service_healthy
 
-  rontend:
+  frontend:
     build:
       context: .
       dockerfile: Dockerfile
