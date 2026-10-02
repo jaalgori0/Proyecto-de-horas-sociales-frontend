@@ -104,7 +104,7 @@ function findLocalProjectDetail(projectId: string) {
 export function ProyectosPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const modalNuevo = searchParams.get('nuevo') === '1';
-  const [projectToEnroll, setProjectToEnroll] = useState<{ id: string; titulo: string } | null>(null);
+  const [projectToEnroll, setProjectToEnroll] = useState<Proyecto | null>(null);
   const [selectedFaculty, setSelectedFaculty] = useState('Todas las facultades');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('Todos');
@@ -297,6 +297,7 @@ export function ProyectosPage() {
         <InscribirEstudianteModal
           projectId={projectToEnroll.id}
           projectTitle={projectToEnroll.titulo}
+          carrerasPermitidas={projectToEnroll.carreras} // <-- Aquí usamos la propiedad oficial 'carreras' de tu tipo Proyecto
           onClose={() => setProjectToEnroll(null)}
           onEnrolled={(updated) => {
             if (updated) {

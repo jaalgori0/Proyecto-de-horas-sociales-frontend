@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: horas-sociales-db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=tu_password_segura
+      - POSTGRES_DB=horas_sociales_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d horas_sociales_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: horas-sociales-backend
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:tu_password_segura@db:5432/horas_sociales_db?sslmode=disable
+      - CORS_ORIGIN=http://localhost:5175
+    depends_on:
+      db:
+        condition: service_healthy
+
+  rontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:4000/api
+    container_name: horas-sociales-frontend
+    restart: always
+    ports:
+      - "5175:5175"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
