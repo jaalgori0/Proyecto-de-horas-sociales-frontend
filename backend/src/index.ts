@@ -18,9 +18,9 @@ async function startServer(port: number, retriesLeft = MAX_PORT_RETRIES) {
 
     await seedInitialFacultiesAndCareers();
 
-    const server = app.listen(port, () => {
-      console.log(`Horas Sociales API running on http://localhost:${port}`);
-      console.log(`Swagger available at http://localhost:${port}/api-docs`);
+    const server = app.listen(port, '0.0.0.0', () => {
+      console.log(`Horas Sociales API running on http://0.0.0.0:${port}`);
+      console.log(`Swagger available at http://0.0.0.0:${port}/api-docs`);
     });
 
     server.on('error', (error: NodeJS.ErrnoException) => {
