@@ -1,14 +1,14 @@
 export const FACULTY_FILTERS = [
   'Todas las facultades',
-  'Arquitectura e Ingenierías',
+  'Ingeniería y Arquitectura',
   'Ciencias Sociales y Humanidades',
-  'Comunicación y Mercadeo',
+  'Ciencias Económicas y Empresariales',
 ] as const;
 
 export type FacultyFilter = (typeof FACULTY_FILTERS)[number];
 
 const facultyCareerMap: Record<Exclude<FacultyFilter, 'Todas las facultades'>, string[]> = {
-  'Arquitectura e Ingenierías': [
+  'Ingeniería y Arquitectura': [
     'arquitectura',
     'ingenieria',
     'ingeniería',
@@ -37,7 +37,7 @@ const facultyCareerMap: Record<Exclude<FacultyFilter, 'Todas las facultades'>, s
     'filosofia',
     'filosofía',
   ],
-  'Comunicación y Mercadeo': [
+  'Ciencias Económicas y Empresariales': [
     'comunicacion',
     'comunicación',
     'mercadeo',
