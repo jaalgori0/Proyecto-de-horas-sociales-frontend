@@ -1,5 +1,6 @@
 import { Building2, CalendarDays, ImagePlus, Layers3, MapPinned, Plus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { coordenadasDepartamentos } from '../data/departamentos';
 import { 
   createProject, 
   getFaculties, 
@@ -241,7 +242,40 @@ export default function CreateProjectModal({
             <div className="form-grid">
               <Field label="Institución" placeholder="Nombre de la institución o entidad" icon={<Building2 size={18} />} value={institutionName} onChange={(event) => setInstitutionName(event.target.value)} required />
               <Field label="Tipo de institución" placeholder="Ej. Universidad pública, privada, instituto" value={institutionType} onChange={(event) => setInstitutionType(event.target.value)} required />
-              <Field label="Ubicación de la institución" placeholder="Ej. San Salvador, El Salvador" icon={<MapPinned size={18} />} value={institutionLocation} onChange={(event) => setInstitutionLocation(event.target.value)} required />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>
+              <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e293b' }}>
+                Ubicación de la institución <span style={{ color: '#e53e3e' }}>*</span>
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: '0rem', color: '#9ca3af', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                  <MapPinned size={18} />
+                </span>
+                <select
+                  style={{
+                    width: '100%',
+                    paddingLeft: '2rem',
+                    paddingRight: '1.5rem',
+                    paddingTop: '0.375rem',
+                    paddingBottom: '0.375rem',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    fontSize: '0.9375rem',
+                    color: '#1a202c',
+                    outline: 'none',
+                    appearance: 'none',
+                    cursor: 'pointer'
+                  }}
+                  value={institutionLocation}
+                  onChange={(event) => setInstitutionLocation(event.target.value)}
+                  required
+                >
+                  <option value="">Selecciona un departamento...</option>
+                  {Object.keys(coordenadasDepartamentos).map((dept) => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
               <Field
                 label="Descripción de la institución"
                 placeholder="Describe brevemente la institución..."
@@ -373,7 +407,40 @@ export default function CreateProjectModal({
               </div>
 
               <Field label="Nombre del proyecto" placeholder="Ej. Campaña de salud comunitaria" icon={<Plus size={18} />} value={title} onChange={(event) => setTitle(event.target.value)} required />
-              <Field label="Ubicación" placeholder="Municipio / departamento" icon={<MapPinned size={18} />} value={location} onChange={(event) => setLocation(event.target.value)} required />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>
+              <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e293b' }}>
+                Ubicación del proyecto <span style={{ color: '#e53e3e' }}>*</span>
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: '0rem', color: '#9ca3af', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                  <MapPinned size={18} />
+                </span>
+                <select
+                  style={{
+                    width: '100%',
+                    paddingLeft: '2rem',
+                    paddingRight: '1.5rem',
+                    paddingTop: '0.375rem',
+                    paddingBottom: '0.375rem',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    fontSize: '0.9375rem',
+                    color: '#1a202c',
+                    outline: 'none',
+                    appearance: 'none',
+                    cursor: 'pointer'
+                  }}
+                  value={location}
+                  onChange={(event) => setLocation(event.target.value)}
+                  required
+                >
+                  <option value="">Selecciona un departamento...</option>
+                  {Object.keys(coordenadasDepartamentos).map((dept) => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
               <Field label="Fecha de inicio" placeholder="YYYY-MM-DD" type="date" icon={<CalendarDays size={18} />} value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
               <Field label="Fecha de cierre" placeholder="YYYY-MM-DD" type="date" icon={<CalendarDays size={18} />} value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
               <Field label="Cupos del proyecto" placeholder="Ej. 5" type="number" value={slots} onChange={(event) => setSlots(event.target.value)} required />

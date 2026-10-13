@@ -38,8 +38,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=http://100.120.30.3:4000/api
     container_name: horas-sociales-frontend
     restart: always
     ports:

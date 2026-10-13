@@ -1,4 +1,12 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://100.120.30.3:4000/api'; //Cambiar la URL
+const getApiBase = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return envUrl;
+  
+  const hostname = window.location.hostname;
+  return `http://${hostname}:4000/api`;
+};
+
+const API_BASE = getApiBase();
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
