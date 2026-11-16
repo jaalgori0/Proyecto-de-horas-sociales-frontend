@@ -11,6 +11,7 @@ export default function ImportHistory({
   loading,
   error,
   activeId,
+  disabled = false,
   onOpen,
   onRefresh,
 }: {
@@ -18,6 +19,8 @@ export default function ImportHistory({
   loading: boolean;
   error: string;
   activeId: string | null;
+  /** Deshabilita "Abrir" mientras hay una operación en curso sobre el lote actual. */
+  disabled?: boolean;
   onOpen: (id: string) => void;
   onRefresh: () => void;
 }) {
@@ -75,7 +78,7 @@ export default function ImportHistory({
                         <td className="muted">{b.creadoPor}</td>
                         <td>
                           {b.estado !== 'DESCARTADO' ? (
-                            <button type="button" className="imp-link-btn" onClick={() => onOpen(b.id)} disabled={b.id === activeId}>
+                            <button type="button" className="imp-link-btn" onClick={() => onOpen(b.id)} disabled={disabled || b.id === activeId}>
                               {b.id === activeId ? 'Abierto' : b.estado === 'PREVISUALIZADO' && !b.expirado ? 'Continuar' : 'Ver'}
                             </button>
                           ) : null}

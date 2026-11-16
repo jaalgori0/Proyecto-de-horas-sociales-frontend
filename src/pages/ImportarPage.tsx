@@ -107,6 +107,7 @@ export default function ImportarPage() {
   }
 
   async function openBatch(id: string) {
+    if (busy !== null || loadingBatch || uploading) return;
     setLoadingBatch(true);
     setBanner(null);
     try {
@@ -131,6 +132,14 @@ export default function ImportarPage() {
           variant: 'info',
           title: 'La vista previa se actualizó',
           text: `${result.message} No se escribió nada en la base.`,
+        });
+      } else if (result.status === 'sin_respuesta') {
+        setBanner({ variant: 'error', title: 'No se recibió respuesta del servidor', text: result.message });
+      } else if (result.recuperado) {
+        setBanner({
+          variant: 'info',
+          title: 'Importación confirmada',
+          text: 'Se perdió la conexión durante la confirmación, pero el servidor alcanzó a registrarla. Este es el resultado.',
         });
       }
       loadHistory();
@@ -183,6 +192,8 @@ export default function ImportarPage() {
 
   const rechazados = batch?.archivos.filter((a) => a.estado === 'RECHAZADO').length ?? 0;
   const editable = batch?.estado === 'PREVISUALIZADO';
+  /** Mientras se sube, confirma, descarta o abre un lote, no se puede cambiar el lote en pantalla. */
+  const locked = busy !== null || loadingBatch || uploading;
 
   return (
     <div className="wide-page imp-page">
@@ -196,7 +207,7 @@ export default function ImportarPage() {
         </div>
         {batch ? (
           <div className="hero-right">
-            <button type="button" className="secondary-btn" onClick={() => { setBatch(null); setBanner(null); }}>
+            <button type="button" className="secondary-btn" disabled={locked} onClick={() => { setBatch(null); setBanner(null); }}>
               <PlusCircle size={18} /> Nueva importación
             </button>
           </div>
@@ -302,6 +313,7 @@ export default function ImportarPage() {
         loading={historyLoading}
         error={historyError}
         activeId={batch?.id ?? null}
+        disabled={locked}
         onOpen={openBatch}
         onRefresh={loadHistory}
       />

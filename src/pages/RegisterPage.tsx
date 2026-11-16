@@ -2,7 +2,7 @@ import { Eye, EyeOff, GraduationCap, Lock, Mail, User, UserCheck } from 'lucide-
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Field } from '../components/ui';
-import { registerUser } from '../services/api';
+import { loginUser, registerUser, saveSession } from '../services/api';
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   return (
@@ -59,7 +59,8 @@ export default function RegisterPage() {
     setIsLoading(true);
     try {
       const user = await registerUser({ nombre, apellido, correo, password });
-      localStorage.setItem('auth_user', JSON.stringify(user));
+      // El registro no emite token: se inicia sesión con las mismas credenciales.
+      saveSession(await loginUser({ correo, password }));
       setToast({ message: `¡Bienvenido, ${user.nombre}!`, type: 'success' });
       setTimeout(() => navigate('/mapa'), 1500);
     } catch (err) {
