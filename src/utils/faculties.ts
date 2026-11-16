@@ -79,10 +79,18 @@ export function normalizeFacultyLabel(value?: string | null) {
   return value?.trim() ?? '';
 }
 
+/** Etiqueta para proyectos sin facultad conocida (sin facultad, carreras ni estudiantes). */
+export const SIN_FACULTAD = 'Sin facultad';
+
+/** true si el valor es una de las facultades oficiales de FACULTY_FILTERS. */
+function isOfficialFaculty(value: string): value is Exclude<FacultyFilter, 'Todas las facultades'> {
+  return value !== 'Todas las facultades' && FACULTY_FILTERS.includes(value as FacultyFilter);
+}
+
 export function resolveFacultyFromCareers(careers: string[] = [], fallback?: string | null) {
   const normalizedFallback = normalizeFacultyLabel(fallback);
-  if (FACULTY_FILTERS.includes(normalizedFallback as FacultyFilter)) {
-    return normalizedFallback as Exclude<FacultyFilter, 'Todas las facultades'>;
+  if (isOfficialFaculty(normalizedFallback)) {
+    return normalizedFallback;
   }
 
   for (const faculty of FACULTY_FILTERS.slice(1) as Exclude<FacultyFilter, 'Todas las facultades'>[]) {
@@ -92,7 +100,8 @@ export function resolveFacultyFromCareers(careers: string[] = [], fallback?: str
     }
   }
 
-  return normalizedFallback || 'Ciencias Sociales y Humanidades';
+  // Sin facultad ni carreras reconocibles: no se asigna ninguna facultad por defecto.
+  return normalizedFallback || SIN_FACULTAD;
 }
 
 export function facultyMatchesProject(
@@ -105,6 +114,10 @@ export function facultyMatchesProject(
   const normalizedSelected = normalizeText(selectedFaculty);
   const normalizedProjectFaculty = normalizeText(projectFaculty ?? '');
   if (normalizedSelected && normalizedSelected === normalizedProjectFaculty) return true;
+
+  // Si el proyecto ya trae una facultad oficial (la deriva el backend por llaves
+  // foráneas), es la única que cuenta: no se adivina por palabras de las carreras.
+  if (isOfficialFaculty(normalizeFacultyLabel(projectFaculty))) return false;
 
   const resolvedFaculty = resolveFacultyFromCareers(careers, projectFaculty);
   if (normalizeText(resolvedFaculty) === normalizedSelected) return true;

@@ -17,9 +17,10 @@ import CreateProjectModal from '../components/CreateProjectModal';
 import EditProjectModal from '../components/EditProjectModal/index';
 import { FACULTY_FILTERS, facultyMatchesProject, resolveFacultyFromCareers, type FacultyFilter } from '../utils/faculties';
 import { ProjectListCard } from '../components/ProjectCards';
-import { BackLink, FilterGroup } from '../components/ui';
-import { instituciones } from '../data/instituciones';
+import { BackLink, FilterGroup, Notice } from '../components/ui';
 import {
+  ApiError,
+  describeApiError,
   getProjectById,
   getProjects,
   updateProject,
@@ -41,37 +42,6 @@ function toVisibleStatus(status?: string | null, estado?: string | null): Visibl
   return 'En progreso';
 }
 
-function mapLocalProjectToDetail(project: Proyecto): ProjectDetailResponse {
-  const institution = instituciones.find((item) => item.nombre === project.institucion || item.sigla === project.institucion);
-  const fallbackImage = institution?.image ?? null;
-
-  return {
-    id: project.id,
-    nombre: project.titulo,
-    titulo: project.titulo,
-    imagen: project.imagen ?? fallbackImage,
-    status: toVisibleStatus(project.status ?? null, project.estado),
-    estado: project.estado,
-    institution: project.institucion,
-    ubicacion: project.ubicacion,
-    descripcion: project.descripcion,
-    resumen: project.descripcion,
-    equipo: project.equipo ?? [],
-    estudiantes: [],
-    estudiantesAsignados: project.equipo?.length ?? 0,
-    cuposTexto: project.cuposTexto ?? undefined,
-    cuposOcupados: project.cuposOcupados ?? project.equipo.length,
-    cuposTotales: project.cuposTotales ?? null,
-    carreras: project.carreras ?? [],
-    facultad: project.facultad ?? resolveFacultyFromCareers(project.carreras ?? [], null),
-    fechaInicio: null,
-    fechaCierre: null,
-    hombres: undefined,
-    mujeres: undefined,
-    desplegados: null,
-  };
-}
-
 function mapDetailToProyecto(detail: any): Proyecto {
   return {
     id: String(detail.id),
@@ -90,16 +60,6 @@ function mapDetailToProyecto(detail: any): Proyecto {
   } as Proyecto;
 }
 
-function findLocalProjectDetail(projectId: string) {
-  for (const institution of instituciones) {
-    const project = institution.proyectos.find((item) => String(item.id) === String(projectId));
-    if (project) {
-      return mapLocalProjectToDetail(project);
-    }
-  }
-  return null;
-}
-
 // ─── ProyectosPage ────────────────────────────────────────────────────────────
 export function ProyectosPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -110,9 +70,7 @@ export function ProyectosPage() {
   const [selectedStatus, setSelectedStatus] = useState('Todos');
   const [selectedLocation, setSelectedLocation] = useState('Todas');
   const [sortBy] = useState<'recentes' | 'titulo' | 'ubicacion'>('recentes');
-  const [projectsData, setProjectsData] = useState<Proyecto[]>(
-    instituciones.flatMap((institution) => institution.proyectos)
-  );
+  const [projectsData, setProjectsData] = useState<Proyecto[]>([]);
   const [loading, setLoading] = useState(true);
   const [successToast, setSuccessToast] = useState<string | null>(null); // ← NUEVO
   const [error, setError] = useState('');
@@ -146,9 +104,10 @@ export function ProyectosPage() {
       setError('');
       const apiProjects = await getProjects();
       setProjectsData(apiProjects.map(mapProject));
-    } catch {
-      setError('No se pudo conectar con el backend. Mostrando datos de respaldo.');
-      setProjectsData(instituciones.flatMap((institution) => institution.proyectos));
+    } catch (err) {
+      // Sin datos de respaldo: se muestra el error real y la lista queda vacía.
+      setError(describeApiError(err, 'No se pudieron cargar los proyectos.'));
+      setProjectsData([]);
     } finally {
       setLoading(false);
     }
@@ -212,7 +171,9 @@ export function ProyectosPage() {
     .sort((a, b) => {
       if (sortBy === 'titulo') return a.titulo.localeCompare(b.titulo);
       if (sortBy === 'ubicacion') return a.ubicacion.localeCompare(b.ubicacion);
-      return b.id.localeCompare(a.id);
+      // 'recentes': se respeta el orden de la API (fecha de inicio descendente).
+      // Los ids son UUID: compararlos no tiene relación con la antigüedad.
+      return 0;
     });
 
   return (
@@ -261,13 +222,19 @@ export function ProyectosPage() {
 
         <section className="list-panel">
           {loading ? <p className="muted">Cargando proyectos...</p> : null}
-          {!loading && error ? <p className="muted">{error}</p> : null}
+          {!loading && error ? (
+            <Notice title="No se pudieron cargar los proyectos" onRetry={() => void fetchProjects()}>
+              {error}
+            </Notice>
+          ) : null}
 
-          <div className="list-meta">
-            <span>
-              Mostrando <strong>{filteredProjects.length}</strong> proyectos
-            </span>
-          </div>
+          {!loading && !error ? (
+            <div className="list-meta">
+              <span>
+                Mostrando <strong>{filteredProjects.length}</strong> de {projectsData.length} proyectos
+              </span>
+            </div>
+          ) : null}
 
           <div className="project-feed">
             {filteredProjects.map((project) => (
@@ -382,6 +349,8 @@ export function ProyectoDetallePage() {
   const [project, setProject] = useState<ProjectDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notFound, setNotFound] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [showEdit, setShowEdit] = useState(false);
   const [statusDraft, setStatusDraft] = useState<VisibleProjectStatus>('En progreso');
   const [savingStatus, setSavingStatus] = useState(false);
@@ -411,18 +380,15 @@ export function ProyectoDetallePage() {
   function loadProject(active: { value: boolean }) {
     setLoading(true);
     setError('');
+    setNotFound(false);
     getProjectById(id)
       .then((data) => { if (active.value) setProject(data); })
       .catch((err: unknown) => {
         if (!active.value) return;
-        const localProject = findLocalProjectDetail(id);
-        if (localProject) {
-          setProject(localProject);
-          setError('');
-          return;
-        }
+        // Sin datos de respaldo: se muestra el error real.
         setProject(null);
-        setError(err instanceof Error ? err.message : 'No se pudo cargar el proyecto');
+        setNotFound(err instanceof ApiError && err.status === 404);
+        setError(describeApiError(err, 'No se pudo cargar el proyecto.'));
       })
       .finally(() => { if (active.value) setLoading(false); });
   }
@@ -431,7 +397,7 @@ export function ProyectoDetallePage() {
     const active = { value: true };
     loadProject(active);
     return () => { active.value = false; };
-  }, [id]);
+  }, [id, reloadKey]);
 
   useEffect(() => {
     if (project) {
@@ -446,6 +412,9 @@ export function ProyectoDetallePage() {
       const updated = await updateProject(project.id, { estado: nextStatus });
       setProject(updated);
       setStatusDraft(toVisibleStatus(updated.status, updated.estado));
+    } catch (err) {
+      setStatusDraft(toVisibleStatus(project.status, project.estado));
+      showToast(`Error: ${describeApiError(err, 'No se pudo cambiar el estado')}`);
     } finally {
       setSavingStatus(false);
     }
@@ -453,7 +422,10 @@ export function ProyectoDetallePage() {
 
   const formatDate = (value: string | null) => {
     if (!value) return 'Sin fecha';
-    const date = new Date(value);
+    // 'YYYY-MM-DD' se interpreta como fecha local: new Date('2026-05-12') sería
+    // medianoche UTC y en El Salvador (UTC-6) se mostraría el día anterior.
+    const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    const date = ymd ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])) : new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
   };
@@ -473,10 +445,15 @@ export function ProyectoDetallePage() {
     return (
       <div className="detail-page wide-page">
         <BackLink to="/proyectos" label="Volver a proyectos" />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300, flexDirection: 'column', gap: 8 }}>
-          <h2>No se pudo cargar el proyecto</h2>
-          <p className="muted">{error}</p>
-        </div>
+        {notFound ? (
+          <Notice variant="info" title="No se encontró el proyecto">
+            Es posible que haya sido eliminado o que el enlace sea incorrecto.
+          </Notice>
+        ) : (
+          <Notice title="No se pudo cargar el proyecto" onRetry={() => setReloadKey((k) => k + 1)}>
+            {error}
+          </Notice>
+        )}
       </div>
     );
   }

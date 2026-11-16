@@ -1,33 +1,92 @@
 const getApiBase = () => {
   const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl) return envUrl;
-  
+  if (envUrl) return envUrl.replace(/\/+$/, '');
+
+  // Sin VITE_API_URL: backend actual (horas-sociales-core-backend) en el mismo host.
   const hostname = window.location.hostname;
-  return `http://${hostname}:4000/api`;
+  return `http://${hostname}:3000/api/v1`;
 };
 
-const API_BASE = getApiBase();
+export const API_BASE = getApiBase();
+
+/**
+ * Error de la API.
+ *  - kind 'network': no hubo respuesta (backend apagado, URL o CORS incorrectos).
+ *  - kind 'http': el backend respondió con un código de error; `message` es el
+ *    mensaje legible que envía ({ error: { code, message, details } }).
+ */
+export class ApiError extends Error {
+  readonly kind: 'network' | 'http';
+  readonly status?: number;
+  readonly code?: string;
+  readonly details?: unknown;
+
+  constructor(kind: 'network' | 'http', message: string, extra: { status?: number; code?: string; details?: unknown } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.kind = kind;
+    this.status = extra.status;
+    this.code = extra.code;
+    this.details = extra.details;
+  }
+}
+
+/** Mensaje para mostrar al usuario a partir de cualquier error de una llamada a la API. */
+export function describeApiError(error: unknown, fallback = 'Ocurrió un error inesperado'): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  if (!response.ok) {
-    // Intentar parsear el JSON de error del backend; si falla, usar el texto plano
-    const text = await response.text();
-    try {
-      const json = JSON.parse(text);
-      throw new Error(json.error ?? json.message ?? text);
-    } catch {
-      throw new Error(text || `Error ${response.status}`);
-    }
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new ApiError(
+      'network',
+      `No se pudo conectar con el servidor (${API_BASE}). Verifique que el backend esté en ejecución.`,
+    );
   }
 
+  if (!response.ok) {
+    // Formato del backend: { error: { code, message, details } }. Si no es JSON, se usa el texto.
+    const text = await response.text();
+    let message = text || `Error ${response.status}`;
+    let code: string | undefined;
+    let details: unknown;
+    try {
+      const json = JSON.parse(text);
+      const err = json?.error;
+      if (err && typeof err === 'object') {
+        message = err.message ?? message;
+        code = err.code;
+        details = err.details;
+        // Errores de validación: se agregan los motivos concretos ("La contraseña debe tener…").
+        if (Array.isArray(details)) {
+          const motivos = details
+            .map((d: { message?: unknown }) => (typeof d?.message === 'string' ? d.message : null))
+            .filter(Boolean);
+          if (motivos.length > 0) message = `${message}: ${motivos.join('; ')}`;
+        }
+      } else if (typeof err === 'string') {
+        message = err;
+      } else if (typeof json?.message === 'string') {
+        message = json.message;
+      }
+    } catch {
+      /* respuesta no JSON: se conserva el texto */
+    }
+    throw new ApiError('http', message, { status: response.status, code, details });
+  }
+
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -290,8 +349,12 @@ export type DashboardSummaryResponse = {
   totalStudentsExternal: number;
   projectsByStatus: Array<{ estado: string; total: string }>;
   trendByYear: Array<{ anio: string; estudiantes: number; proyectos: number }>;
-  genderSummary: { hombres: number; mujeres: number };
+  genderSummary: GenderSummaryResponse;
+  totalMunicipalities?: number;
 };
+
+/** `sinDato`: participantes sin género registrado (el histórico CSS no lo trae). */
+export type GenderSummaryResponse = { hombres: number; mujeres: number; sinDato?: number };
 
 export function getDashboardSummary() {
   return request<DashboardSummaryResponse>('/dashboard/summary');
@@ -333,7 +396,7 @@ export function getStudentsByCarreraAndYear() {
 
 /** Req 2 — Género (también disponible en summary.genderSummary) */
 export function getGenderSummaryAPI() {
-  return request<{ hombres: number; mujeres: number }>('/dashboard/genero');
+  return request<GenderSummaryResponse>('/dashboard/genero');
 }
 
 /** Req 3 — Tendencia anual */
@@ -385,6 +448,7 @@ export type AuthUser = {
   nombre: string;
   apellido: string;
   correo: string;
+  rol?: string;
 };
 
 export function registerUser(payload: RegisterPayload) {
@@ -402,13 +466,7 @@ export function loginUser(payload: LoginPayload) {
 }
 
 export async function removeEnrollment(projectId: string, enrollmentId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/projects/${projectId}/enrollments/${enrollmentId}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as any)?.message ?? 'No se pudo eliminar la inscripción');
-  }
+  await request<void>(`/projects/${projectId}/enrollments/${enrollmentId}`, { method: 'DELETE' });
 }
 
 export function updateStudentEnrollment(
@@ -448,13 +506,7 @@ export function updateInstitution(institutionId: string | number, payload: Updat
 }
 
 export async function deleteProject(projectId: string | number): Promise<void> {
-  const res = await fetch(`${API_BASE}/projects/${projectId}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as any)?.message ?? 'No se pudo eliminar el proyecto');
-  }
+  await request<unknown>(`/projects/${projectId}`, { method: 'DELETE' });
 }
 
 export type CreateInstitutionPayload = {

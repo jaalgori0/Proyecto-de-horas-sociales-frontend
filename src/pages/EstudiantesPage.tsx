@@ -1,9 +1,8 @@
 import { ArrowRight, BookOpen, MapPin, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FilterGroup } from '../components/ui';
-import { proyectosEstudiantes } from '../data/proyectos';
-import { getProjectById, getProjects } from '../services/api';
+import { FilterGroup, Notice } from '../components/ui';
+import { describeApiError, getProjectById, getProjects } from '../services/api';
 import { FACULTY_FILTERS, facultyMatchesProject, resolveFacultyFromCareers, type FacultyFilter } from '../utils/faculties';
 
 // ── tipos ─────────────────────────────────────────────────────────────────────
@@ -57,8 +56,19 @@ function EstadoBadge({ estado }: { estado: string }) {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function getInitials(name: string) {
-  return name.split(/\s+/).map((p) => p[0]).filter(Boolean).join('').slice(0, 2).toUpperCase();
+/**
+ * Iniciales para el avatar. Tolera null/undefined/vacío y nombres del histórico
+ * CSS con puntuación ("APELLIDO1, APELLIDO2 NOMBRES") → "AA". Sin letras → "?".
+ */
+function getInitials(name: string | null | undefined) {
+  const initials = (name ?? '')
+    .split(/\s+/)
+    .map((part) => part.replace(/[^\p{L}\p{N}]/gu, '').charAt(0))
+    .filter(Boolean)
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+  return initials || '?';
 }
 
 function normalizeLocation(value: string) {
@@ -71,26 +81,6 @@ function normalizeStatus(estado: string) {
   return 'En progreso';
 }
 
-function getFallbackDirectoryProjects(): StudentDirectoryProject[] {
-  return proyectosEstudiantes.map((p) => ({
-    id: p.id,
-    titulo: p.titulo,
-    facultad: p.facultad,
-    institution: p.facultad,
-    status: 'Activo',
-    ubicacion: p.ubicacion,
-    ubicacionBase: p.ubicacion,
-    carreras: Array.from(new Set(p.estudiantes.map((s) => s.carrera).filter(Boolean))),
-    estudiantes: p.estudiantes.map((s) => ({
-      nombre: s.nombre,
-      carrera: s.carrera,
-      carnet: '',
-      email: null,
-    })),
-    totalEstudiantes: p.estudiantes.length,
-  }));
-}
-
 // ── página ────────────────────────────────────────────────────────────────────
 export default function EstudiantesPage() {
   const [searchParams] = useSearchParams();
@@ -101,6 +91,8 @@ export default function EstudiantesPage() {
   const [projects, setProjects] = useState<StudentDirectoryProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [failedDetails, setFailedDetails] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -116,13 +108,14 @@ export default function EstudiantesPage() {
         );
 
         if (!active) return;
+        setFailedDetails(detailResults.filter((r) => r.status === 'rejected').length);
 
         const mapped: StudentDirectoryProject[] = list.map((project, index) => {
           const detail = detailResults[index]?.status === 'fulfilled' ? detailResults[index].value : null;
           const detailStudents = detail?.estudiantes ?? [];
 
           const students: StudentCardItem[] = detailStudents.map((s) => ({
-            nombre: s.nombre,
+            nombre: s.nombre?.trim() || 'Sin nombre',
             carrera: s.carrera ?? 'Sin carrera',
             carnet: s.carnet ?? '',
             email: s.email ?? null,
@@ -159,10 +152,12 @@ export default function EstudiantesPage() {
         });
 
         setProjects(mapped);
-      } catch {
+      } catch (err) {
         if (!active) return;
-        setError('No se pudo conectar con el backend. Mostrando datos de respaldo.');
-        setProjects(getFallbackDirectoryProjects());
+        // Sin datos de respaldo: se muestra el error real y la lista queda vacía.
+        setError(describeApiError(err, 'No se pudieron cargar los estudiantes.'));
+        setProjects([]);
+        setFailedDetails(0);
       } finally {
         if (active) setLoading(false);
       }
@@ -170,7 +165,13 @@ export default function EstudiantesPage() {
 
     loadDirectory();
     return () => { active = false; };
-  }, []);
+  }, [reloadKey]);
+
+  // Estudiantes distintos (por carnet) entre todos los proyectos cargados.
+  const totalStudents = useMemo(
+    () => new Set(projects.flatMap((p) => p.estudiantes.map((s) => s.carnet || s.nombre))).size,
+    [projects]
+  );
 
   const locationOptions = useMemo(
     () => ['Todas', ...Array.from(new Set(projects.map((p) => p.ubicacionBase))).sort()],
@@ -191,7 +192,7 @@ export default function EstudiantesPage() {
         project.facultad,
         project.institution,
         project.ubicacion,
-        ...project.estudiantes.map((s) => `${s.nombre} ${s.carrera} ${s.carnet}`),
+        ...project.estudiantes.map((s) => `${s.nombre ?? ''} ${s.carrera ?? ''} ${s.carnet ?? ''}`),
       ].some((v) => v.toLowerCase().includes(query));
     const matchesFaculty = facultyMatchesProject(facultyFilter as FacultyFilter, project.facultad, project.carreras);
     const matchesStatus =
@@ -257,7 +258,25 @@ export default function EstudiantesPage() {
 
         <section className="list-panel project-team-feed">
           {loading ? <p className="muted">Cargando estudiantes...</p> : null}
-          {!loading && error ? <p className="muted">{error}</p> : null}
+          {!loading && error ? (
+            <Notice title="No se pudieron cargar los estudiantes" onRetry={() => setReloadKey((k) => k + 1)}>
+              {error}
+            </Notice>
+          ) : null}
+          {!loading && !error && failedDetails > 0 ? (
+            <Notice title="Datos incompletos" onRetry={() => setReloadKey((k) => k + 1)}>
+              No se pudo cargar el detalle de {failedDetails} proyecto{failedDetails !== 1 ? 's' : ''}: sus
+              estudiantes no aparecen en la lista.
+            </Notice>
+          ) : null}
+          {!loading && !error ? (
+            <div className="list-meta">
+              <span>
+                Mostrando <strong>{filteredProjects.length}</strong> de {projects.length} proyectos ·{' '}
+                <strong>{totalStudents}</strong> estudiantes distintos en total
+              </span>
+            </div>
+          ) : null}
           {!loading && !error && filteredProjects.length === 0 ? (
             <p className="muted">No se encontraron proyectos con esos filtros.</p>
           ) : null}
@@ -343,9 +362,9 @@ export default function EstudiantesPage() {
 
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
-                    {project.estudiantes.slice(0, 3).map((student) => (
+                    {project.estudiantes.slice(0, 3).map((student, index) => (
                       <div
-                        key={student.nombre}
+                        key={student.carnet || `${student.nombre}-${index}`}
                         style={{
                           display: 'flex',
                           flexDirection: 'column',
