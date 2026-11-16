@@ -2,7 +2,7 @@ import { Building2, Eye, EyeOff, GraduationCap, Layers3, Lock, Mail} from 'lucid
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Field } from '../components/ui';
-import { loginUser } from '../services/api';
+import { loginUser, saveSession } from '../services/api';
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   return (
@@ -49,7 +49,7 @@ export default function LoginPage({ tipo }: { tipo: 'docente' | 'estudiante' }) 
     setIsLoading(true);
     try {
       const user = await loginUser({ correo, password });
-      localStorage.setItem('auth_user', JSON.stringify(user));
+      saveSession(user);
       setToast({ message: `Bienvenido, ${user.nombre}`, type: 'success' });
       setTimeout(() => navigate('/mapa'), 1000);
     } catch (err) {

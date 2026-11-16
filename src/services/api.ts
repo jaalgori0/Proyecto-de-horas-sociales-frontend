@@ -9,9 +9,95 @@ const getApiBase = () => {
 
 export const API_BASE = getApiBase();
 
+// ─── Sesión ──────────────────────────────────────────────────────────────────
+// El token de POST /auth/login viaja en `Authorization: Bearer <token>` en cada petición.
+// Se guarda aparte del usuario para que `auth_user` siga siendo el mismo objeto de siempre.
+
+const AUTH_USER_KEY = 'auth_user';
+const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_EXPIRES_KEY = 'auth_expires_at';
+/** A dónde se envía al usuario cuando su sesión no es válida (mismo destino que "Cerrar sesión"). */
+export const LOGIN_PATH = '/login/estudiante';
+
+function storageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Guarda usuario + token tras un login correcto. */
+export function saveSession(session: LoginResponse): void {
+  const { token, expiresAt, ...user } = session;
+  try {
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    localStorage.setItem(AUTH_EXPIRES_KEY, expiresAt);
+  } catch {
+    /* almacenamiento bloqueado: no se puede recordar la sesión */
+  }
+}
+
+export function clearSession(): void {
+  try {
+    localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_EXPIRES_KEY);
+  } catch {
+    /* nada que limpiar */
+  }
+}
+
+/** Token vigente, o null si no hay sesión o ya venció. */
+export function getAuthToken(): string | null {
+  const token = storageGet(AUTH_TOKEN_KEY);
+  if (!token) return null;
+  const expiresAt = Date.parse(storageGet(AUTH_EXPIRES_KEY) ?? '');
+  if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+    clearSession();
+    return null;
+  }
+  return token;
+}
+
+/** Sesión inválida en una ruta protegida: se limpia y se vuelve al login (una sola vez). */
+let redirectingToLogin = false;
+function handleUnauthorized(): void {
+  clearSession();
+  if (redirectingToLogin || window.location.pathname.startsWith('/login')) return;
+  redirectingToLogin = true;
+  window.location.assign(LOGIN_PATH);
+}
+
+/** Mensaje legible cuando el error no trae el JSON del backend (p. ej. HTML de nginx o Vercel). */
+function friendlyHttpMessage(status: number): string {
+  switch (status) {
+    case 401:
+      return 'Su sesión no es válida o venció. Inicie sesión de nuevo.';
+    case 403:
+      return 'No tiene permiso para realizar esta operación.';
+    case 404:
+      return 'No se encontró el recurso solicitado.';
+    case 408:
+    case 504:
+      return 'El servidor tardó demasiado en responder. Si estaba importando, revise el historial antes de reintentar.';
+    case 413:
+      return 'Los archivos son demasiado grandes para el servidor. Suba menos archivos o archivos más pequeños.';
+    case 429:
+      return 'Demasiadas peticiones seguidas. Espere un momento e intente de nuevo.';
+    case 502:
+    case 503:
+      return 'El servidor no está disponible en este momento. Intente de nuevo en unos minutos.';
+    default:
+      return status >= 500 ? `Error del servidor (${status}). Intente de nuevo más tarde.` : `La petición falló (${status}).`;
+  }
+}
+
 /**
  * Error de la API.
- *  - kind 'network': no hubo respuesta (backend apagado, URL o CORS incorrectos).
+ *  - kind 'network': no hubo respuesta (backend apagado, URL o CORS incorrectos,
+ *    conexión caída o timeout; en este último caso `code` es 'TIMEOUT').
  *  - kind 'http': el backend respondió con un código de error; `message` es el
  *    mensaje legible que envía ({ error: { code, message, details } }).
  */
@@ -38,36 +124,56 @@ export function describeApiError(error: unknown, fallback = 'Ocurrió un error i
   return fallback;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+type RequestOptions = {
+  /** Aborta la petición pasado este tiempo (ApiError kind 'network', code 'TIMEOUT'). */
+  timeoutMs?: number;
+};
+
+async function request<T>(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<T> {
   let response: Response;
   // Con FormData el navegador fija `multipart/form-data; boundary=…`: forzar JSON rompería la subida.
   const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+  const token = getAuthToken();
+  const controller = options.timeoutMs ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : undefined;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
+      signal: controller?.signal ?? init?.signal,
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init?.headers ?? {}),
       },
     });
   } catch {
+    if (controller?.signal.aborted) {
+      throw new ApiError(
+        'network',
+        `El servidor no respondió en ${Math.round((options.timeoutMs ?? 0) / 1000)} segundos.`,
+        { code: 'TIMEOUT' },
+      );
+    }
     throw new ApiError(
       'network',
-      `No se pudo conectar con el servidor (${API_BASE}). Verifique que el backend esté en ejecución.`,
+      `No se pudo conectar con el servidor (${API_BASE}). Verifique su conexión y que el backend esté en ejecución.`,
     );
+  } finally {
+    clearTimeout(timer);
   }
 
   if (!response.ok) {
-    // Formato del backend: { error: { code, message, details } }. Si no es JSON, se usa el texto.
-    const text = await response.text();
-    let message = text || `Error ${response.status}`;
+    // Formato del backend: { error: { code, message, details } }. Si la respuesta no es ese
+    // JSON (HTML de un proxy en un 413/502/504, texto vacío…), se usa un mensaje según el código.
+    const text = await response.text().catch(() => '');
+    let message = friendlyHttpMessage(response.status);
     let code: string | undefined;
     let details: unknown;
     try {
       const json = JSON.parse(text);
       const err = json?.error;
       if (err && typeof err === 'object') {
-        message = err.message ?? message;
+        message = typeof err.message === 'string' && err.message ? err.message : message;
         code = err.code;
         details = err.details;
         // Errores de validación: se agregan los motivos concretos ("La contraseña debe tener…").
@@ -83,8 +189,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         message = json.message;
       }
     } catch {
-      /* respuesta no JSON: se conserva el texto */
+      /* respuesta no JSON: se conserva el mensaje según el código HTTP */
     }
+    // 401 en una ruta protegida = sesión vencida o inválida. En /auth/* (login fallido) no se redirige.
+    if (response.status === 401 && !path.startsWith('/auth/')) handleUnauthorized();
     throw new ApiError('http', message, { status: response.status, code, details });
   }
 
@@ -460,8 +568,15 @@ export function registerUser(payload: RegisterPayload) {
   });
 }
 
+/** Respuesta de POST /auth/login: el usuario más el token de sesión. Guárdela con saveSession(). */
+export type LoginResponse = AuthUser & {
+  token: string;
+  /** ISO 8601. */
+  expiresAt: string;
+};
+
 export function loginUser(payload: LoginPayload) {
-  return request<AuthUser>('/auth/login', {
+  return request<LoginResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -643,19 +758,51 @@ export function getImportDetail(id: string, params: { estado?: ImportItemEstado;
   return request<ImportBatchDetail>(`/imports/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`);
 }
 
+/** Tiempo máximo de espera de la confirmación (un lote grande puede tardar). */
+export const CONFIRM_TIMEOUT_MS = 60_000;
+
 export type ConfirmImportResult =
-  | { status: 'confirmado'; batch: ImportBatchDetail }
+  /** `recuperado`: se perdió la respuesta, pero al consultar el lote ya estaba confirmado. */
+  | { status: 'confirmado'; batch: ImportBatchDetail; recuperado?: boolean }
   /** 409 PREVIEW_DESACTUALIZADA: la base cambió desde la vista previa; `batch` es la clasificación nueva. */
-  | { status: 'desactualizado'; batch: ImportBatchDetail; message: string };
+  | { status: 'desactualizado'; batch: ImportBatchDetail; message: string }
+  /** Se perdió la respuesta y el lote todavía no figura como confirmado (puede seguir procesándose). */
+  | { status: 'sin_respuesta'; batch: ImportBatchDetail; message: string };
 
 export async function confirmImport(id: string): Promise<ConfirmImportResult> {
   try {
-    const batch = await request<ImportBatchDetail>(`/imports/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+    const batch = await request<ImportBatchDetail>(
+      `/imports/${encodeURIComponent(id)}/confirm`,
+      { method: 'POST' },
+      { timeoutMs: CONFIRM_TIMEOUT_MS },
+    );
     return { status: 'confirmado', batch };
   } catch (error) {
     const details = error instanceof ApiError ? (error.details as { code?: string; lote?: ImportBatchDetail } | undefined) : undefined;
     if (error instanceof ApiError && error.status === 409 && details?.code === 'PREVIEW_DESACTUALIZADA' && details.lote) {
       return { status: 'desactualizado', batch: details.lote, message: error.message };
+    }
+    if (error instanceof ApiError && error.kind === 'network') {
+      // La conexión se cortó o venció el timeout: el servidor pudo haber confirmado igual.
+      // Se pregunta el estado real del lote en vez de adivinar.
+      let batch: ImportBatchDetail;
+      try {
+        batch = await getImportDetail(id);
+      } catch {
+        throw new ApiError(
+          'network',
+          `${error.message} No se pudo verificar si el lote alcanzó a confirmarse: revise el historial antes de reintentar.`,
+          { code: error.code },
+        );
+      }
+      if (batch.estado === 'CONFIRMADO') return { status: 'confirmado', batch, recuperado: true };
+      return {
+        status: 'sin_respuesta',
+        batch,
+        message:
+          `${error.message} El lote todavía figura como no confirmado; es posible que el servidor siga ` +
+          'procesándolo. Espere un momento y actualice el historial antes de volver a confirmar.',
+      };
     }
     throw error;
   }

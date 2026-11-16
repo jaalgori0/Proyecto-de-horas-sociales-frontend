@@ -57,25 +57,14 @@ export default function EditStudentModal({ student, projectId, onClose, onSaved,
         setIsSaving(true);
         setError(null);
 
-        console.log('[EditStudentModal] Enviando PUT:', {
-            projectId,
-            enrollmentId: student.id,
-            nombre: name,
-            carnet,
-            carrera: career,
-            genero: gender || null,
-            email: email || null,
-        });
-
         try {
-            const result = await updateFn(projectId, student.id, {
+            await updateFn(projectId, student.id, {
                 nombre:  name.trim(),
                 carnet:  carnet.trim(),
                 carrera: career.trim(),
                 genero:  gender || undefined,
                 email:   email.trim() || undefined,
             });
-            console.log('[EditStudentModal] Respuesta del backend:', result);
             onSaved();
             onClose();
         } catch (err) {
