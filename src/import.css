@@ -1,0 +1,864 @@
+/* ─── Importación masiva (/importar) ──────────────────────────────────────────
+   Reutiliza page-hero, dash-kpi-*, dash-chart-card, dash-table, chip, tab,
+   primary-btn/secondary-btn y Notice. Aquí solo lo propio del módulo (prefijo imp-). */
+
+.imp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.imp-page > .page-hero {
+  margin-bottom: 4px;
+}
+
+.imp-page .notice {
+  margin: 0;
+}
+
+.imp-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(18, 37, 77, 0.05);
+}
+
+.imp-batch {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.imp-batch > .dash-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.imp-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.imp-section-toggle + .imp-filecards {
+  margin-top: 18px;
+}
+
+.imp-section-toggle-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.imp-section-toggle-copy .dash-chart-title {
+  margin: 0;
+}
+
+.imp-batch-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.imp-small {
+  font-size: 0.78rem;
+}
+
+.imp-spin {
+  animation: imp-spin 0.9s linear infinite;
+}
+
+@keyframes imp-spin {
+  to { transform: rotate(360deg); }
+}
+
+.imp-rotate {
+  transform: rotate(180deg);
+}
+
+.imp-chevron,
+.imp-history-toggle svg:last-child,
+.imp-link-btn svg {
+  transition: transform 0.15s ease;
+}
+
+.primary-btn:disabled,
+.secondary-btn:disabled,
+.imp-danger-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.imp-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  color: var(--blue);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.imp-link-btn:hover:not(:disabled) {
+  background: rgba(47, 104, 236, 0.08);
+}
+
+.imp-link-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.imp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.imp-icon-btn:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.imp-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 12px 20px rgba(220, 38, 38, 0.2);
+  cursor: pointer;
+}
+
+.imp-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Pills y etiquetas ───────────────────────────────────────── */
+.imp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.imp-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.imp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.imp-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  border: 1px solid;
+}
+
+.imp-tag-warn {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.imp-tag-danger {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.imp-tag-info {
+  color: #1e40af;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+/* ── Dropzone ────────────────────────────────────────────────── */
+.imp-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 24px;
+  border: 2px dashed #c9d5ee;
+  border-radius: 16px;
+  background: var(--surface-soft);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.imp-dropzone:hover,
+.imp-dropzone:focus-visible,
+.imp-dropzone.dragging {
+  border-color: var(--blue);
+  background: rgba(47, 104, 236, 0.05);
+}
+
+.imp-dropzone.disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.imp-dropzone strong {
+  font-size: 1.05rem;
+}
+
+.imp-dropzone .muted {
+  font-size: 0.88rem;
+  max-width: 560px;
+}
+
+.imp-dropzone-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue);
+  background: rgba(47, 104, 236, 0.1);
+  margin-bottom: 4px;
+}
+
+.imp-rejected-list {
+  margin: 14px 0 0;
+  padding: 10px 14px 10px 30px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #7f1d1d;
+  font-size: 0.88rem;
+}
+
+.imp-file-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.imp-file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.imp-file-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.imp-file-icon.pdf {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.imp-file-icon.xls {
+  color: #15803d;
+  background: #f0fdf4;
+}
+
+.imp-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.imp-file-size {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.imp-dropzone-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.imp-howto {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ── Archivos y conciliación ─────────────────────────────────── */
+.imp-filecards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.imp-filecard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.imp-filecard-warn {
+  border-color: #fdba74;
+  background: #fffaf5;
+}
+
+.imp-filecard-danger {
+  border-color: #fecaca;
+  background: #fffafa;
+}
+
+.imp-filecard-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.imp-filecard-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.imp-filecard-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imp-filecard-title .muted {
+  font-size: 0.8rem;
+}
+
+.imp-file-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.imp-file-status-ok { color: #15803d; }
+.imp-file-status-warn { color: #c2410c; }
+.imp-file-status-danger { color: #b91c1c; }
+
+.imp-filecard-reason {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #7f1d1d;
+}
+
+.imp-reconcile {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.imp-reconcile-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.imp-reconcile-cell strong {
+  font-size: 1.15rem;
+}
+
+.imp-reconcile-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.imp-reconcile-ref {
+  font-size: 0.76rem;
+  color: #15803d;
+}
+
+.imp-reconcile-cell.mismatch {
+  background: #fff7ed;
+  box-shadow: inset 0 0 0 1px #fdba74;
+}
+
+.imp-reconcile-cell.mismatch .imp-reconcile-ref {
+  color: #c2410c;
+  font-weight: 700;
+}
+
+.imp-unparsed ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  max-height: 180px;
+  overflow: auto;
+}
+
+.imp-unparsed code {
+  font-size: 0.75rem;
+  color: var(--text);
+}
+
+/* ── Acciones ────────────────────────────────────────────────── */
+.imp-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-color: rgba(47, 104, 236, 0.25);
+  background: linear-gradient(180deg, rgba(47, 104, 236, 0.04), rgba(255, 255, 255, 1));
+}
+
+.imp-actions-copy {
+  flex: 1 1 320px;
+  font-size: 0.92rem;
+}
+
+.imp-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.imp-confirm-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-color: rgba(47, 104, 236, 0.35);
+  box-shadow: 0 12px 30px rgba(18, 37, 77, 0.08);
+}
+
+.imp-confirm-box ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #3a4456;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.imp-confirm-box p {
+  margin: 0;
+}
+
+.imp-confirm-danger {
+  border-color: #fecaca;
+}
+
+/* ── Resultado ───────────────────────────────────────────────── */
+.imp-result {
+  border-color: #bbf7d0;
+}
+
+.imp-result-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.imp-result-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #16a34a;
+  background: #dcfce7;
+  flex-shrink: 0;
+}
+
+.imp-result-grid {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.imp-result-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.imp-result-cell .dash-kpi-value {
+  font-size: 1.4rem;
+  color: var(--muted);
+}
+
+.imp-result-cell.has-value .dash-kpi-value {
+  color: var(--text);
+}
+
+/* ── Vista previa ────────────────────────────────────────────── */
+.imp-tabs {
+  overflow-x: auto;
+  margin-bottom: 14px;
+}
+
+.imp-tabs .tab {
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.imp-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.imp-tab-help {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.imp-preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.imp-preview-toolbar .chip-row {
+  gap: 8px;
+}
+
+.imp-preview-toolbar .chip {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 0.85rem;
+}
+
+.imp-search {
+  position: relative;
+  flex: 0 1 300px;
+}
+
+.imp-search .search-icon-inside {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+
+.imp-search input {
+  width: 100%;
+  padding: 9px 12px 9px 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.imp-search input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(47, 104, 236, 0.1);
+}
+
+.imp-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.imp-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  transition: box-shadow 0.15s ease;
+}
+
+.imp-item.open {
+  box-shadow: 0 6px 18px rgba(18, 37, 77, 0.07);
+}
+
+.imp-item-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.imp-item-entity {
+  flex: 0 0 104px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--blue);
+}
+
+.imp-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.imp-item-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imp-item-main .muted {
+  font-size: 0.83rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imp-item-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: #4b5563;
+}
+
+.imp-item-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.imp-item-tags {
+  padding: 0 14px 12px calc(14px + 104px + 14px);
+}
+
+.imp-item-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+  border-radius: 0 0 12px 12px;
+}
+
+.imp-detail-title {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.imp-completar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.imp-completar li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+}
+
+.imp-completar li > span:first-child {
+  min-width: 130px;
+  font-weight: 600;
+}
+
+.imp-compare {
+  background: var(--surface);
+  border-radius: 10px;
+}
+
+.imp-compare td:first-child {
+  color: var(--muted);
+  font-weight: 600;
+  width: 150px;
+}
+
+.imp-compare tr.imp-diff td {
+  background: #fff7ed;
+}
+
+.imp-compare tr.imp-diff td:not(:first-child) {
+  color: #9a3412;
+  font-weight: 700;
+}
+
+.imp-item-key {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.imp-empty {
+  margin: 8px 0;
+}
+
+.imp-list-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 0.88rem;
+}
+
+/* ── Historial ───────────────────────────────────────────────── */
+.imp-history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.imp-history-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.imp-history-toggle .dash-chart-title {
+  margin: 0;
+}
+
+.imp-history .dash-table-wrapper,
+.imp-history .notice,
+.imp-history > .muted {
+  margin-top: 16px;
+}
+
+.imp-history-active td {
+  background: rgba(47, 104, 236, 0.05);
+}
+
+/* ── Móvil ───────────────────────────────────────────────────── */
+/* Las KPIs siguen la convención del Dashboard en móvil (responsive.css: 2 columnas
+   bajo 720px, 1 bajo 480px), así que aquí no se tocan. */
+@media (max-width: 760px) {
+  .imp-filecards {
+    grid-template-columns: 1fr;
+  }
+
+  .imp-item-head {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .imp-item-entity {
+    flex-basis: 100%;
+  }
+
+  .imp-item-tags {
+    padding-left: 14px;
+  }
+
+  .imp-search {
+    flex-basis: 100%;
+  }
+
+  .imp-actions-row {
+    width: 100%;
+  }
+
+  .imp-actions-row > button {
+    flex: 1 1 auto;
+  }
+}

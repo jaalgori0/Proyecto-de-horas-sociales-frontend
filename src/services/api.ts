@@ -40,11 +40,13 @@ export function describeApiError(error: unknown, fallback = 'Ocurrió un error i
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
+  // Con FormData el navegador fija `multipart/form-data; boundary=…`: forzar JSON rompería la subida.
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(init?.headers ?? {}),
       },
     });
@@ -543,4 +545,122 @@ export function getFaculties() {
 
 export function getCareers() {
   return request<CareerResponse[]>('/careers');
+}
+// ─── Importación masiva (POST /imports …) ─────────────────────────────────────
+// Contrato del backend: src/modules/imports (horas-sociales-core-backend).
+
+export type ImportBatchEstado = 'PREVISUALIZADO' | 'CONFIRMADO' | 'DESCARTADO';
+export type ImportItemEstado = 'NUEVO' | 'IGNORADO' | 'ADVERTENCIA' | 'CONFLICTO';
+export type ImportItemEntidad = 'INSTITUCION' | 'PROYECTO' | 'ESTUDIANTE' | 'PARTICIPACION' | 'FILA_PDF' | 'FILA_XLS';
+export type ImportItemAccion = 'INSERTAR' | 'COMPLETAR' | 'NINGUNA';
+
+export type ImportConteo = Record<ImportItemEstado, number>;
+
+export type ImportResumen = {
+  total: ImportConteo;
+  porEntidad: Partial<Record<ImportItemEntidad, ImportConteo>>;
+  /** Horas que entrarán con las participaciones nuevas. */
+  horasNuevas: number;
+};
+
+export type ImportConciliacion = {
+  control: string;
+  extraido: number;
+  reporte: number | null;
+  ok: boolean;
+};
+
+export type ImportFile = {
+  archivo: string;
+  estado: 'PROCESADO' | 'RECHAZADO';
+  motivo: string | null;
+  tipo: 'PDF_DETALLE_HORAS' | 'XLS_MEMORIA_LABORES' | null;
+  sha256: string;
+  bytes: number;
+  paginas: number | null;
+  titulo: string | null;
+  periodoDesde: string | null;
+  periodoHasta: string | null;
+  generadoEn: string | null;
+  filas: number;
+  advertencias: string[];
+  conciliacion: ImportConciliacion[];
+  lineasNoReconocidas: { archivo: string; ubicacion: string; texto: string; motivo: string }[];
+};
+
+export type ImportItem = {
+  id: number;
+  entidad: ImportItemEntidad;
+  clave: string;
+  estado: ImportItemEstado;
+  accion: ImportItemAccion;
+  motivos: string[];
+  /** Lo que trae el archivo. */
+  datos: Record<string, unknown>;
+  /** Lo que ya hay en la base (si existe). */
+  existente: Record<string, unknown> | null;
+  /** Campo → valor que se llenará (solo campos vacíos). */
+  completar: Record<string, unknown> | null;
+};
+
+/** Filas escritas por paso al confirmar: { estudiantes_insertados: { n: 1 }, movimientos_de_horas: { n: 1, horas: 600 } } */
+export type ImportResultado = Record<string, { n: number; [extra: string]: number }>;
+
+export type ImportBatchSummary = {
+  id: string;
+  estado: ImportBatchEstado;
+  creadoPor: string;
+  creadoEn: string;
+  expiraEn: string;
+  expirado: boolean;
+  confirmadoPor: string | null;
+  confirmadoEn: string | null;
+  resumen: ImportResumen | Record<string, never>;
+  resultado: ImportResultado | null;
+};
+
+export type ImportBatchListItem = ImportBatchSummary & { archivos: number };
+
+export type ImportBatchDetail = ImportBatchSummary & {
+  archivos: ImportFile[];
+  items: ImportItem[];
+};
+
+/** Sube los archivos (campo "files") y devuelve la vista previa clasificada. No escribe en el maestro. */
+export function uploadImport(formData: FormData) {
+  return request<ImportBatchDetail>('/imports', { method: 'POST', body: formData });
+}
+
+export function getImports(limit = 20) {
+  return request<ImportBatchListItem[]>(`/imports?limit=${limit}`);
+}
+
+export function getImportDetail(id: string, params: { estado?: ImportItemEstado; entidad?: ImportItemEntidad } = {}) {
+  const query = new URLSearchParams();
+  if (params.estado) query.set('estado', params.estado);
+  if (params.entidad) query.set('entidad', params.entidad);
+  const qs = query.toString();
+  return request<ImportBatchDetail>(`/imports/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`);
+}
+
+export type ConfirmImportResult =
+  | { status: 'confirmado'; batch: ImportBatchDetail }
+  /** 409 PREVIEW_DESACTUALIZADA: la base cambió desde la vista previa; `batch` es la clasificación nueva. */
+  | { status: 'desactualizado'; batch: ImportBatchDetail; message: string };
+
+export async function confirmImport(id: string): Promise<ConfirmImportResult> {
+  try {
+    const batch = await request<ImportBatchDetail>(`/imports/${encodeURIComponent(id)}/confirm`, { method: 'POST' });
+    return { status: 'confirmado', batch };
+  } catch (error) {
+    const details = error instanceof ApiError ? (error.details as { code?: string; lote?: ImportBatchDetail } | undefined) : undefined;
+    if (error instanceof ApiError && error.status === 409 && details?.code === 'PREVIEW_DESACTUALIZADA' && details.lote) {
+      return { status: 'desactualizado', batch: details.lote, message: error.message };
+    }
+    throw error;
+  }
+}
+
+export function discardImport(id: string) {
+  return request<void>(`/imports/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
