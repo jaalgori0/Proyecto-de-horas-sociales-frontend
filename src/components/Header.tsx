@@ -9,6 +9,7 @@ const navItems = [
   { to: '/proyectos', label: 'Proyectos' },
   { to: '/estudiantes', label: 'Estudiantes' },
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/importar', label: 'Importar' },
 ];
 
 function getUserInitials(user: AuthUser | null): string {
