@@ -48,6 +48,10 @@ export type ProyectoMapa = Proyecto & {
   personas: number;
   hombres?: number;
   mujeres?: number;
+  /** Lugar del proyecto en el mapa (ver ProjectMapResponse). */
+  departamento?: string;
+  municipio?: string | null;
+  enMapa?: boolean;
 };
 
 export type MarcadorMapa = {
@@ -73,4 +77,4 @@ export type MiembroEquipo = {
   cargo: string;
   carrera: string;
   activo: boolean;
-};
+};
