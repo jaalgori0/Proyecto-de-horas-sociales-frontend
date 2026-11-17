@@ -269,7 +269,8 @@ export default function MapaVistaPage() {
         {!mostrarDetalle ? (
           <div className="projects-list-container">
             <div className="section-header">
-              <h2 className="sidebar-title">Proyectos activos</h2>
+              {/* La lista incluye proyectos de todos los estados (cada tarjeta muestra el suyo). */}
+              <h2 className="sidebar-title">Proyectos{!loadingData && !loadError ? ` (${projects.length})` : ''}</h2>
             </div>
 
             {loadingData ? <p className="muted" style={{ padding: '0 16px' }}>Cargando proyectos...</p> : null}
