@@ -273,6 +273,12 @@ export type ProjectMapResponse = {
   descripcion: string;
   hombres: number;
   mujeres: number;
+  /** Departamento resuelto en el backend (clave del marcador), país, texto no reconocido o "Sin ubicación". */
+  departamento: string;
+  /** Municipio de El Salvador, si se conoce. */
+  municipio: string | null;
+  /** `departamento` es uno de los 14 departamentos: el proyecto tiene marcador en el mapa. */
+  enMapa: boolean;
 };
 
 export type MapMarkerResponse = {

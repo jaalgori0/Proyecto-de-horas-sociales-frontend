@@ -2471,6 +2471,154 @@ img {
   backdrop-filter: blur(6px);
 }
 
+/* ─── Mapa: nombre del lugar y selección ───────────────────────────────────── */
+.gender-marker {
+  cursor: pointer;
+}
+
+/* Con el nombre del lugar arriba, la caja deja de tener alto fijo. */
+.gender-marker .marker-box.with-place {
+  flex-direction: column;
+  height: auto;
+  gap: 2px;
+  padding: 6px 8px 4px;
+}
+
+.gender-marker .marker-place {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #41506b;
+  white-space: nowrap;
+}
+
+.gender-marker.is-selected .marker-box {
+  border: 2px solid #0b63ff;
+  box-shadow: 0 0 0 4px rgba(11, 99, 255, 0.18), 0 8px 20px rgba(12, 30, 60, 0.18);
+}
+
+.gender-marker.is-selected .marker-place {
+  color: #0b63ff;
+}
+
+/* Zoom bajo: pin compacto con el número de proyectos (14 cajas grandes se solaparían). */
+.place-pin {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+  border: 2px solid #0b63ff;
+  color: #0b3fa8;
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: 0 6px 14px rgba(12, 30, 60, 0.18);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.place-pin:hover {
+  transform: scale(1.08);
+}
+
+.place-pin.is-selected {
+  background: #0b63ff;
+  color: #ffffff;
+  box-shadow: 0 0 0 5px rgba(11, 99, 255, 0.22), 0 6px 14px rgba(12, 30, 60, 0.22);
+}
+
+.leaflet-tooltip.place-tooltip {
+  border-radius: 8px;
+  border: 1px solid rgba(20, 30, 60, 0.1);
+  box-shadow: 0 6px 16px rgba(12, 30, 60, 0.14);
+  color: #071024;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 6px 10px;
+  text-align: center;
+}
+
+/* Panel izquierdo: encabezado del lugar seleccionado */
+.map-place-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 16px 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eef4ff;
+  border: 1px solid #d3e1ff;
+}
+
+.map-place-info {
+  min-width: 0;
+}
+
+.map-place-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #0b63ff;
+}
+
+.map-place-name {
+  margin: 2px 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #071024;
+  overflow-wrap: anywhere;
+}
+
+.map-place-meta {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #4b5870;
+  overflow-wrap: anywhere;
+}
+
+.map-place-clear {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #b9cdf7;
+  background: #ffffff;
+  color: #0b3fa8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.map-place-clear:hover {
+  background: #f5f8ff;
+}
+
+.map-place-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #0b63ff;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.map-place-hint {
+  margin: 0 16px 10px;
+  font-size: 0.8rem;
+  color: #687182;
+}
+
 
 .legend {
   width: 10px;
