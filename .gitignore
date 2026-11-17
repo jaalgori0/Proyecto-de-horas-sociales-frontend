@@ -1,7 +1,9 @@
 node_modules/
 dist/
 .vite/
-.env
-.env.local
-.vercel/
 *.tsbuildinfo
+
+# Variables de entorno reales: nunca se versionan.
+.env
+.env.*
+!.env.example

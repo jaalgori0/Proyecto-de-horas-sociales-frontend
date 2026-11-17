@@ -390,7 +390,17 @@ export default function EstudiantesPage() {
                             margin: 0, fontSize: '0.95rem', color: '#1c2433', fontWeight: 800,
                             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                           }}>
-                            {student.nombre}
+                            {/^\d{8}$/.test(student.carnet) ? (
+                              <Link
+                                className="student-profile-link"
+                                to={`/estudiantes/${student.carnet}`}
+                                title="Ver perfil del estudiante"
+                              >
+                                {student.nombre}
+                              </Link>
+                            ) : (
+                              student.nombre
+                            )}
                           </h4>
                         </div>
 

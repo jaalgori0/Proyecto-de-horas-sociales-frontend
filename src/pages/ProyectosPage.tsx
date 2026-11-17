@@ -847,7 +847,13 @@ export function ProyectoDetallePage() {
                           {initials}
                         </div>
                         <p style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#1c2433' }}>
-                          {student.nombre}
+                          {student.carnet && /^\d{8}$/.test(student.carnet) ? (
+                            <Link className="student-profile-link" to={`/estudiantes/${student.carnet}`} title="Ver perfil del estudiante">
+                              {student.nombre}
+                            </Link>
+                          ) : (
+                            student.nombre
+                          )}
                         </p>
                       </div>
                       <div style={{ height: 1, background: '#e8edf8', marginBottom: 8 }} />
