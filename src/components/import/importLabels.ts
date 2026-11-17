@@ -161,6 +161,10 @@ export const resultadoLabels: Record<string, string> = {
   participaciones_insertadas: 'Participaciones nuevas',
   carreras_de_proyecto: 'Carreras vinculadas a proyectos',
   movimientos_de_horas: 'Movimientos de horas',
+  // Datos que el reporte no trae y el backend infiere (solo completa vacíos)
+  generos_inferidos: 'Géneros inferidos por nombre',
+  instituciones_ubicadas: 'Instituciones ubicadas',
+  proyectos_ubicados: 'Proyectos ubicados',
 };
 
 export const RESULTADO_ORDEN = Object.keys(resultadoLabels);

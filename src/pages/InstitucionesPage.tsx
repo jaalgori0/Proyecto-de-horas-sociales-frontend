@@ -56,19 +56,6 @@ export function InstitucionesPage() {
     [items]
   );
 
-  const institutionImages = [
-    'InstitutionDetailView.jpeg',
-    'InstitutionDetailViewCopy.jpeg',
-    'InstitutionsDirectory.jpeg',
-    'ProjectsDirectoryDetailedView.jpeg',
-    'MainMapDashboard.jpeg',
-    'EmployeeLogin.jpeg',
-    'StudentLogin.jpeg',
-    'StudentsbyProject.jpeg',
-    'StudentProjectDetail.jpeg',
-    'InstitutionDetailView.jpeg',
-  ];
-
   const filteredInstitutions = items
     .filter((inst) => {
       const query = searchQuery.trim().toLowerCase();
@@ -135,8 +122,7 @@ export function InstitucionesPage() {
       </div>
 
       <div className="institution-grid">
-        {filteredInstitutions.map((inst, i) => {
-          const imageSrc = inst.image ?? `/images/${institutionImages[i % institutionImages.length]}`;
+        {filteredInstitutions.map((inst) => {
           const cardInstitution: Institucion = {
             id: String(inst.id),
             nombre: inst.nombre,
@@ -153,7 +139,7 @@ export function InstitucionesPage() {
           };
           return (
             <div key={inst.id} className="institution-card-link">
-              <InstitutionCard institution={cardInstitution} imageUrl={imageSrc} />
+              <InstitutionCard institution={cardInstitution} imageUrl={inst.image} />
             </div>
           );
         })}
