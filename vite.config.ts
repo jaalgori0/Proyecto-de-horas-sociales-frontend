@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       watch: {
-        ignored: ['**/dist/**', '**/backend/**'],
+        ignored: ['**/dist/**'],
       },
     },
   };

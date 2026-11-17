@@ -49,6 +49,16 @@ export function clearSession(): void {
   }
 }
 
+/** Rol del usuario de la sesión (ADMIN | COORDINADOR | CONSULTA), o null. Solo para mostrar/ocultar acciones: el backend decide. */
+export function getSessionRole(): string | null {
+  try {
+    const user = JSON.parse(storageGet(AUTH_USER_KEY) ?? 'null') as { rol?: unknown } | null;
+    return typeof user?.rol === 'string' ? user.rol : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Token vigente, o null si no hay sesión o ya venció. */
 export function getAuthToken(): string | null {
   const token = storageGet(AUTH_TOKEN_KEY);
@@ -810,4 +820,147 @@ export async function confirmImport(id: string): Promise<ConfirmImportResult> {
 
 export function discardImport(id: string) {
   return request<void>(`/imports/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ─── Perfil del estudiante y horas manuales ──────────────────────────────────
+// Rutas con sesión (requireAuth). POST /hour-movements exige rol ADMIN o COORDINADOR.
+
+export type HourOrigin = 'IMPORTACION' | 'MANUAL';
+export type HourNaturaleza = 'INTERNA' | 'EXTERNA';
+export type EnrollmentEstado = 'ASIGNADA' | 'EN_CURSO' | 'FINALIZADA' | 'RETIRADA' | 'CANCELADA';
+
+export type StudentHourMovement = {
+  id: string;
+  enrollmentId: string;
+  projectId: string;
+  proyecto: string;
+  institucion: string;
+  horas: number;
+  naturaleza: HourNaturaleza;
+  origen: HourOrigin;
+  /** YYYY-MM-DD */
+  fecha: string;
+  concepto: string | null;
+  descripcion: string | null;
+  registradoPor: { id: string; nombre: string } | null;
+  registradoEn: string;
+};
+
+export type StudentProgress = {
+  requisito: number;
+  horasTotales: number;
+  horasInternas: number;
+  horasExternas: number;
+  horasImportadas: number;
+  horasManuales: number;
+  /** 0–100 truncado; 100 solo con el requisito cumplido. */
+  porcentaje: number;
+  completado: boolean;
+  horasRestantes: number;
+  horasExtra: number;
+};
+
+export type StudentParticipation = {
+  enrollmentId: string;
+  cargo: string;
+  estado: EnrollmentEstado;
+  asignadaEn: string;
+  cerradaEn: string | null;
+  horas: number;
+  horasImportadas: number;
+  horasManuales: number;
+  proyecto: {
+    id: string;
+    titulo: string;
+    naturaleza: HourNaturaleza;
+    estado: 'Activo' | 'En progreso' | 'Cerrado';
+    fechaInicio: string | null;
+    fechaCierre: string | null;
+    esSistema: boolean;
+  };
+  institucion: { id: string; nombre: string; sigla: string | null };
+  movimientos: StudentHourMovement[];
+};
+
+export type StudentProfile = {
+  student: {
+    id: string;
+    carnet: string;
+    nombre: string;
+    nombres: string | null;
+    apellidos: string | null;
+    correoInstitucional: string;
+    emailPersonal: string | null;
+    telefono: string | null;
+    genero: 'Masculino' | 'Femenino' | null;
+    avatarUrl: string | null;
+    activo: boolean;
+    carrera: { id: string; nombre: string };
+    facultad: { id: string; nombre: string } | null;
+  };
+  progreso: StudentProgress;
+  participaciones: StudentParticipation[];
+};
+
+export type ManualHoursPayload = {
+  projectId: string;
+  horas: number;
+  /** Si se omite, se usa la naturaleza del proyecto. */
+  naturaleza?: HourNaturaleza;
+  /** YYYY-MM-DD, no futura. */
+  fechaHoras: string;
+  concepto: string;
+};
+
+export type ManualHoursResult = {
+  profile: StudentProfile;
+  movementId: string;
+  /** true: la misma Idempotency-Key ya se había procesado (no se duplicó). */
+  replayed: boolean;
+};
+
+export async function getStudentIdByCarnet(carnet: string): Promise<string> {
+  const res = await request<{ data: { id: string; carnet: string } }>(
+    `/students/by-carnet/${encodeURIComponent(carnet)}`,
+  );
+  return res.data.id;
+}
+
+export async function getStudentProfile(studentId: string): Promise<StudentProfile> {
+  const res = await request<{ data: StudentProfile }>(`/students/${encodeURIComponent(studentId)}/profile`);
+  return res.data;
+}
+
+/**
+ * Asigna horas manualmente. `idempotencyKey` debe ser el mismo en los reintentos
+ * de un mismo envío: el backend no duplica el movimiento.
+ */
+export async function addManualHours(
+  studentId: string,
+  payload: ManualHoursPayload,
+  idempotencyKey: string,
+): Promise<ManualHoursResult> {
+  const res = await request<{ data: StudentProfile; meta: { movementId: string; replayed: boolean } }>(
+    `/students/${encodeURIComponent(studentId)}/hour-movements`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+    { timeoutMs: 20_000 },
+  );
+  return { profile: res.data, movementId: res.meta.movementId, replayed: res.meta.replayed };
+}
+
+/** Revoca un movimiento MANUAL (403 si es importado del CSS). Devuelve el perfil actualizado. */
+export async function deleteManualHours(
+  studentId: string,
+  movementId: string,
+): Promise<{ profile: StudentProfile; deletedEnrollment: boolean }> {
+  const res = await request<{ data: StudentProfile; meta: { movementId: string; deletedEnrollment: boolean } }>(
+    `/students/${encodeURIComponent(studentId)}/hour-movements/${encodeURIComponent(movementId)}`,
+    { method: 'DELETE' },
+    { timeoutMs: 20_000 },
+  );
+  return { profile: res.data, deletedEnrollment: res.meta.deletedEnrollment };
 }

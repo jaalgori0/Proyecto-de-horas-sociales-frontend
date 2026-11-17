@@ -6,6 +6,7 @@ import './styles.css';
 import './scroll-cards.css';
 import './dashboard.css';
 import './import.css';
+import './student-profile.css';
 import './responsive.css';
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {error: Error | null}> {
