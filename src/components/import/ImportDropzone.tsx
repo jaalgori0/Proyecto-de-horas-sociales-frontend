@@ -2,8 +2,11 @@
  * Zona de arrastre para los reportes del CSS. Acepta varios PDF/XLS/XLSX a la vez,
  * valida extensión, tamaño y cantidad (mismos límites por defecto que el backend)
  * y muestra la lista antes de subir. La validación real del contenido la hace el backend.
+ *
+ * Con PDF en la lista ofrece además «Generar Excel para revisar»: descarga una plantilla
+ * con lo extraído para corregirla antes de importar (la plantilla se sube aquí mismo).
  */
-import { FileSpreadsheet, FileText, Loader2, UploadCloud, X } from 'lucide-react';
+import { FileDown, FileSpreadsheet, FileText, Loader2, UploadCloud, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { formatBytes } from './importLabels';
@@ -25,13 +28,20 @@ export default function ImportDropzone({
   files,
   onFilesChange,
   onSubmit,
-  uploading,
+  uploading: analyzing,
+  onGenerateTemplate,
+  generatingTemplate = false,
 }: {
   files: File[];
   onFilesChange: (files: File[]) => void;
   onSubmit: () => void;
   uploading: boolean;
+  /** PDF de la lista → plantilla Excel para revisar (los demás archivos se ignoran). */
+  onGenerateTemplate?: () => void;
+  generatingTemplate?: boolean;
 }) {
+  // Mientras se analiza o se genera la plantilla, la lista no se puede cambiar.
+  const uploading = analyzing || generatingTemplate;
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [rejected, setRejected] = useState<string[]>([]);
@@ -66,6 +76,9 @@ export default function ImportDropzone({
   }
 
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+  const pdfCount = files.filter((f) => extension(f.name) === '.pdf').length;
+  // Aviso temprano (por nombre): el backend rechaza el lote si la plantilla salió de alguno de estos PDF.
+  const plantillas = files.filter((f) => extension(f.name) === '.xlsx' && /^plantilla-revision/i.test(f.name));
 
   return (
     <section className="imp-card">
@@ -93,8 +106,8 @@ export default function ImportDropzone({
         </div>
         <strong>Arrastre aquí los reportes del CSS</strong>
         <span className="muted">
-          o haga clic para seleccionarlos · PDF «Detalle de Horas por Proyecto» y Excel «Memoria de Labores» ·
-          hasta {IMPORT_MAX_FILES} archivos de {IMPORT_MAX_FILE_MB} MB
+          o haga clic para seleccionarlos · PDF «Detalle de Horas por Proyecto», Excel «Memoria de Labores» o la
+          plantilla de revisión ya corregida · hasta {IMPORT_MAX_FILES} archivos de {IMPORT_MAX_FILE_MB} MB
         </span>
         <input
           ref={inputRef}
@@ -150,12 +163,37 @@ export default function ImportDropzone({
               <button type="button" className="secondary-btn" disabled={uploading} onClick={() => { setRejected([]); onFilesChange([]); }}>
                 Limpiar
               </button>
+              {onGenerateTemplate && pdfCount > 0 ? (
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  disabled={uploading}
+                  onClick={onGenerateTemplate}
+                  title="Descarga un Excel con lo extraído de los PDF para revisarlo y corregirlo antes de importar"
+                >
+                  {generatingTemplate ? <Loader2 size={18} className="imp-spin" /> : <FileDown size={18} />}
+                  {generatingTemplate ? 'Generando Excel…' : 'Generar Excel para revisar'}
+                </button>
+              ) : null}
               <button type="button" className="primary-btn" disabled={uploading} onClick={onSubmit}>
-                {uploading ? <Loader2 size={18} className="imp-spin" /> : <UploadCloud size={18} />}
-                {uploading ? 'Analizando archivos…' : 'Analizar archivos'}
+                {analyzing ? <Loader2 size={18} className="imp-spin" /> : <UploadCloud size={18} />}
+                {analyzing ? 'Analizando archivos…' : 'Analizar archivos'}
               </button>
             </div>
           </div>
+          {plantillas.length > 0 && pdfCount > 0 ? (
+            <p className="imp-template-warning" role="alert">
+              La lista tiene una plantilla de revisión y también PDF. Si la plantilla salió de esos PDF, el lote se
+              rechazará para no duplicar las filas: quite los PDF y suba solo la plantilla corregida.
+            </p>
+          ) : null}
+          {onGenerateTemplate && pdfCount > 0 && plantillas.length === 0 ? (
+            <p className="imp-template-hint">
+              ¿Algún PDF trae filas cortadas entre páginas o tablas desordenadas? Genere el Excel, corríjalo y súbalo
+              aquí en lugar de los PDF.
+              {pdfCount < files.length ? ' Solo se incluyen los PDF de la lista.' : ''}
+            </p>
+          ) : null}
         </>
       ) : null}
     </section>

@@ -7,6 +7,10 @@
  *   3. Confirmar → POST /imports/:id/confirm. Si la base cambió desde la vista previa, el
  *      backend responde 409 PREVIEW_DESACTUALIZADA con la clasificación nueva y se muestra esa.
  *   4. O descartar → DELETE /imports/:id.
+ *
+ * Paso opcional antes del 1: con PDF en la lista, «Generar Excel para revisar» →
+ * POST /imports/review-template descarga una plantilla con lo extraído. Se corrige en
+ * Excel y se sube aquí mismo (el backend la reconoce y la concilia con los totales del PDF).
  */
 import { AlertTriangle, Clock, FileStack, PlusCircle, Sparkles, Timer, UploadCloud } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -24,6 +28,7 @@ import {
   confirmImport,
   describeApiError,
   discardImport,
+  downloadReviewTemplate,
   getImportDetail,
   getImports,
   uploadImport,
@@ -63,6 +68,7 @@ function initialTabFor(conteo: ImportConteo): ImportItemEstado {
 export default function ImportarPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [batch, setBatch] = useState<ImportBatchDetail | null>(null);
   const [loadingBatch, setLoadingBatch] = useState(false);
   const [busy, setBusy] = useState<'confirm' | 'discard' | null>(null);
@@ -106,8 +112,47 @@ export default function ImportarPage() {
     }
   }
 
+  async function handleGenerateTemplate() {
+    const pdfs = files.filter((file) => file.name.toLowerCase().endsWith('.pdf'));
+    if (pdfs.length === 0) return;
+    const formData = new FormData();
+    for (const file of pdfs) formData.append('files', file, file.name);
+    setGeneratingTemplate(true);
+    setBanner(null);
+    try {
+      const plantilla = await downloadReviewTemplate(formData);
+      const url = URL.createObjectURL(plantilla.blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = plantilla.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // Los PDF salen de la lista: subirlos junto con la plantilla duplicaría las filas.
+      setFiles((current) => current.filter((file) => !pdfs.includes(file)));
+      const dudosas = plantilla.filasConAdvertencias;
+      const lineas = plantilla.lineasNoReconocidas;
+      setBanner({
+        variant: 'info',
+        title: `Se descargó ${plantilla.filename}`,
+        text:
+          `${formatNumber(plantilla.filas)} participaciones extraídas` +
+          (dudosas > 0
+            ? `; ${formatNumber(dudosas)} marcada${dudosas !== 1 ? 's' : ''} «Revisar» (filtre esa columna)`
+            : '; ninguna fila dudosa') +
+          (lineas > 0 ? ` y ${formatNumber(lineas)} línea${lineas !== 1 ? 's' : ''} no reconocida${lineas !== 1 ? 's' : ''}` : '') +
+          '. Corríjala en Excel y súbala aquí (en lugar de los PDF) para ver la vista previa.',
+      });
+    } catch (err) {
+      setBanner({ variant: 'error', title: 'No se pudo generar el Excel de revisión', text: describeApiError(err) });
+    } finally {
+      setGeneratingTemplate(false);
+    }
+  }
+
   async function openBatch(id: string) {
-    if (busy !== null || loadingBatch || uploading) return;
+    if (busy !== null || loadingBatch || uploading || generatingTemplate) return;
     setLoadingBatch(true);
     setBanner(null);
     try {
@@ -193,7 +238,7 @@ export default function ImportarPage() {
   const rechazados = batch?.archivos.filter((a) => a.estado === 'RECHAZADO').length ?? 0;
   const editable = batch?.estado === 'PREVISUALIZADO';
   /** Mientras se sube, confirma, descarta o abre un lote, no se puede cambiar el lote en pantalla. */
-  const locked = busy !== null || loadingBatch || uploading;
+  const locked = busy !== null || loadingBatch || uploading || generatingTemplate;
 
   return (
     <div className="wide-page imp-page">
@@ -219,7 +264,14 @@ export default function ImportarPage() {
       ) : null}
 
       {!batch ? (
-        <ImportDropzone files={files} onFilesChange={setFiles} onSubmit={handleUpload} uploading={uploading} />
+        <ImportDropzone
+          files={files}
+          onFilesChange={setFiles}
+          onSubmit={handleUpload}
+          uploading={uploading}
+          onGenerateTemplate={handleGenerateTemplate}
+          generatingTemplate={generatingTemplate}
+        />
       ) : null}
 
       {loadingBatch ? <p className="muted">Cargando lote…</p> : null}
@@ -298,7 +350,7 @@ export default function ImportarPage() {
         </div>
       ) : null}
 
-      {!batch && !uploading && files.length === 0 ? (
+      {!batch && !uploading && !generatingTemplate && files.length === 0 ? (
         <div className="imp-howto">
           <UploadCloud size={18} />
           <span>
