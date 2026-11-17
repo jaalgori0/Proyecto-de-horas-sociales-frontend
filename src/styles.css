@@ -723,6 +723,33 @@ img {
   margin-bottom: 8px;
 }
 
+/* Fila de etiquetas (tipo + "Aliada" cuando no hay imagen) */
+.uca-card-tags {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.uca-card-tags:empty {
+  display: none;
+}
+
+/* Tarjeta sin logotipo/foto: sin contenedor gráfico, solo información tipográfica */
+.uca-card-v2--no-image .uca-card-body {
+  padding-top: 28px;
+}
+
+.uca-verified-badge.uca-verified-badge--inline {
+  position: static;
+  display: inline-block !important;
+  margin-bottom: 8px;
+  background: #f1f5f9;
+  box-shadow: none;
+  font-size: 12px;
+}
+
 .uca-card-title {
   font-size: 20px;
   font-weight: 800;
