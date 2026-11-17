@@ -15,6 +15,8 @@ export type Proyecto = {
   cuposOcupados?: number;
   cuposTotales?: number | null;
   cuposTexto?: string;
+  /** Estudiantes inscritos (ASIGNADA/EN_CURSO/FINALIZADA), calculado por el backend. */
+  estudiantesAsignados?: number;
   imagen?: string;
   descripcion: string;
   equipo: string[];
