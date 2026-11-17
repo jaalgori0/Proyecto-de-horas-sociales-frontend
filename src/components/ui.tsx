@@ -1,4 +1,4 @@
-import { Search, ChevronLeft } from 'lucide-react';
+import { Search, ChevronLeft, AlertTriangle, Info, RotateCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -181,5 +181,41 @@ export function BackLink({ to, label }: { to: string; label: string }) {
       <ChevronLeft size={16} />
       <span>{label}</span>
     </Link>
+  );
+}
+
+// ─── Notice ───────────────────────────────────────────────────────────────────
+/**
+ * Aviso visible en la página.
+ *  - variant "error": la API no respondió o respondió con error. Se usa en lugar
+ *    de mostrar datos de ejemplo: la pantalla nunca oculta un fallo de conexión.
+ *  - variant "info": aclaración sobre los datos reales (p. ej. datos incompletos).
+ */
+export function Notice({
+  variant = 'error',
+  title,
+  children,
+  onRetry,
+}: {
+  variant?: 'error' | 'info';
+  title: string;
+  children?: ReactNode;
+  onRetry?: () => void;
+}) {
+  const Icon = variant === 'error' ? AlertTriangle : Info;
+  return (
+    <div className={`notice notice-${variant}`} role={variant === 'error' ? 'alert' : 'status'}>
+      <Icon size={18} className="notice-icon" aria-hidden="true" />
+      <div className="notice-body">
+        <strong className="notice-title">{title}</strong>
+        {children ? <div className="notice-text">{children}</div> : null}
+      </div>
+      {onRetry ? (
+        <button type="button" className="notice-retry" onClick={onRetry}>
+          <RotateCw size={14} aria-hidden="true" />
+          <span>Reintentar</span>
+        </button>
+      ) : null}
+    </div>
   );
 }

@@ -2,7 +2,7 @@ import { Eye, EyeOff, GraduationCap, Lock, Mail, User, UserCheck } from 'lucide-
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Field } from '../components/ui';
-import { registerUser } from '../services/api';
+import { loginUser, registerUser, saveSession } from '../services/api';
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   return (
@@ -46,15 +46,21 @@ export default function RegisterPage() {
       setToast({ message: 'Todos los campos son obligatorios', type: 'error' });
       return;
     }
-    if (password.length < 6) {
-      setToast({ message: 'La contraseña debe tener al menos 6 caracteres', type: 'error' });
+    // Mismas reglas que el backend (POST /auth/register): entre 8 y 128 caracteres.
+    if (password.length < 8) {
+      setToast({ message: 'La contraseña debe tener al menos 8 caracteres', type: 'error' });
+      return;
+    }
+    if (password.length > 128) {
+      setToast({ message: 'La contraseña no puede superar 128 caracteres', type: 'error' });
       return;
     }
 
     setIsLoading(true);
     try {
       const user = await registerUser({ nombre, apellido, correo, password });
-      localStorage.setItem('auth_user', JSON.stringify(user));
+      // El registro no emite token: se inicia sesión con las mismas credenciales.
+      saveSession(await loginUser({ correo, password }));
       setToast({ message: `¡Bienvenido, ${user.nombre}!`, type: 'success' });
       setTimeout(() => navigate('/mapa'), 1500);
     } catch (err) {
@@ -89,7 +95,7 @@ export default function RegisterPage() {
               <Field label="Correo electrónico" placeholder="correo@ejemplo.com" icon={<Mail size={18} />} type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} />
               <Field
                 label="Contraseña"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres"
                 icon={<Lock size={18} />}
                 suffix={
                   <button

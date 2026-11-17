@@ -3,22 +3,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import EditInstitutionModal from '../components/EditInstitutionModal';
 import InstitutionCard from '../components/InstitutionCard';
-import { BackLink } from '../components/ui';
-import { instituciones } from '../data/instituciones';
+import { BackLink, Notice } from '../components/ui';
 import {
+  ApiError,
+  describeApiError,
   getInstitutionById,
   getInstitutions,
   type InstitutionDetailResponse,
   type InstitutionListResponse,
-  type InstitutionProjectResponse,
 } from '../services/api';
 import type { Institucion } from '../types';
-
-function normalizeProjectStatus(estado: string) {
-  if (estado === 'Cerrado') return 'Cerrado';
-  if (estado === 'Activo') return 'Activo';
-  return 'En progreso';
-}
 
 // ─── InstitucionesPage ────────────────────────────────────────────────────────
 export function InstitucionesPage() {
@@ -28,6 +22,7 @@ export function InstitucionesPage() {
   const [items, setItems] = useState<InstitutionListResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -39,22 +34,11 @@ export function InstitucionesPage() {
         const data = await getInstitutions();
         if (!active) return;
         setItems(data);
-      } catch {
+      } catch (err) {
         if (!active) return;
-        setError('No se pudo conectar con el backend. Mostrando datos de respaldo.');
-        setItems(
-          instituciones.map((institution) => ({
-            id: institution.id,
-            nombre: institution.nombre,
-            tipo: institution.tipo ?? null,
-            ubicacion: institution.ubicacion,
-            image: institution.image ?? null,
-            totalProyectosActivos: institution.proyectos.filter((project) => project.estado === 'Activo').length,
-            totalEstudiantesAsignados: Number(
-              institution.estadisticas.find(([, label]) => label.toLowerCase().includes('estudiantes'))?.[0] ?? 0
-            ),
-          }))
-        );
+        // Sin datos de respaldo: se muestra el error real y la lista queda vacía.
+        setError(describeApiError(err, 'No se pudieron cargar las instituciones.'));
+        setItems([]);
       } finally {
         if (active) setLoading(false);
       }
@@ -65,7 +49,7 @@ export function InstitucionesPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   const institutionTypes = useMemo(
     () => ['Todos', ...Array.from(new Set(items.map((institution) => institution.tipo?.trim()).filter(Boolean))).sort()],
@@ -131,7 +115,11 @@ export function InstitucionesPage() {
       </header>
 
       {loading ? <p className="muted">Cargando instituciones...</p> : null}
-      {!loading && error ? <p className="muted">{error}</p> : null}
+      {!loading && error ? (
+        <Notice title="No se pudieron cargar las instituciones" onRetry={() => setReloadKey((k) => k + 1)}>
+          {error}
+        </Notice>
+      ) : null}
 
       <div className="chip-row">
         {institutionTypes.map((type, index) => (
@@ -271,6 +259,8 @@ export function InstitucionDetallePage() {
   const [institution, setInstitution] = useState<InstitutionDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notFound, setNotFound] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [showEdit, setShowEdit] = useState(false);
 
   useEffect(() => {
@@ -280,37 +270,16 @@ export function InstitucionDetallePage() {
       try {
         setLoading(true);
         setError('');
+        setNotFound(false);
         const data = await getInstitutionById(id);
         if (!active) return;
         setInstitution(data);
-      } catch {
+      } catch (err) {
         if (!active) return;
-        const fallback = instituciones.find((item) => String(item.id) === String(id)) ?? instituciones[0];
-        const mappedProjects: InstitutionProjectResponse[] = fallback.proyectos.map((project) => ({
-          id: project.id,
-          nombreInstitucion: fallback.nombre,
-          nombreProyecto: project.titulo,
-          estadoProyecto: normalizeProjectStatus(project.estado) as InstitutionProjectResponse['estadoProyecto'],
-          ubicacion: project.ubicacion,
-        }));
-        setInstitution({
-          id: fallback.id,
-          image: fallback.image ?? null,
-          tipo: fallback.tipo ?? null,
-          nombre: fallback.nombre,
-          ubicacion: fallback.ubicacion,
-          descripcion: fallback.descripcion,
-          totalProyectosActivos: fallback.proyectos.filter((project) => project.estado !== 'Cerrado').length,
-          totalEstudiantesAsignados: Number(
-            fallback.estadisticas.find(([, label]) => label.toLowerCase().includes('estudiantes'))?.[0] ?? 0
-          ),
-          totalCarrerasAplicables: new Set(fallback.proyectos.flatMap((project) => project.carreras)).size,
-          proyectosGenerales: mappedProjects,
-          proyectosActivos: mappedProjects.filter((project) => project.estadoProyecto === 'Activo'),
-          proyectosEnProgreso: mappedProjects.filter((project) => project.estadoProyecto === 'En progreso'),
-          proyectosCerrados: mappedProjects.filter((project) => project.estadoProyecto === 'Cerrado'),
-        });
-        setError('No se pudo conectar con el backend. Mostrando datos de respaldo.');
+        // Sin datos de respaldo: se muestra el error real.
+        setInstitution(null);
+        setNotFound(err instanceof ApiError && err.status === 404);
+        setError(describeApiError(err, 'No se pudo cargar la institución.'));
       } finally {
         if (active) setLoading(false);
       }
@@ -321,7 +290,7 @@ export function InstitucionDetallePage() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, reloadKey]);
 
   if (loading) {
     return (
@@ -336,7 +305,15 @@ export function InstitucionDetallePage() {
     return (
       <div className="detail-page wide-page">
         <BackLink to="/instituciones" label="Volver a instituciones" />
-        <p className="muted">No se encontró la institución.</p>
+        {notFound ? (
+          <Notice variant="info" title="No se encontró la institución">
+            Es posible que haya sido eliminada o que el enlace sea incorrecto.
+          </Notice>
+        ) : (
+          <Notice title="No se pudo cargar la institución" onRetry={() => setReloadKey((k) => k + 1)}>
+            {error}
+          </Notice>
+        )}
       </div>
     );
   }
@@ -350,7 +327,6 @@ export function InstitucionDetallePage() {
           <span>Editar institución</span>
         </button>
       </div>
-      {error ? <p className="muted">{error}</p> : null}
 
       {showEdit ? (
         <EditInstitutionModal

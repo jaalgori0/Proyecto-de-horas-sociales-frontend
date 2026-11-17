@@ -1,33 +1,212 @@
 const getApiBase = () => {
   const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl) return envUrl;
-  
+  if (envUrl) return envUrl.replace(/\/+$/, '');
+
+  // Sin VITE_API_URL: backend actual (horas-sociales-core-backend) en el mismo host.
   const hostname = window.location.hostname;
-  return `http://${hostname}:4000/api`;
+  return `http://${hostname}:3000/api/v1`;
 };
 
-const API_BASE = getApiBase();
+export const API_BASE = getApiBase();
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+// ─── Sesión ──────────────────────────────────────────────────────────────────
+// El token de POST /auth/login viaja en `Authorization: Bearer <token>` en cada petición.
+// Se guarda aparte del usuario para que `auth_user` siga siendo el mismo objeto de siempre.
 
-  if (!response.ok) {
-    // Intentar parsear el JSON de error del backend; si falla, usar el texto plano
-    const text = await response.text();
-    try {
-      const json = JSON.parse(text);
-      throw new Error(json.error ?? json.message ?? text);
-    } catch {
-      throw new Error(text || `Error ${response.status}`);
+const AUTH_USER_KEY = 'auth_user';
+const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_EXPIRES_KEY = 'auth_expires_at';
+/** A dónde se envía al usuario cuando su sesión no es válida (mismo destino que "Cerrar sesión"). */
+export const LOGIN_PATH = '/login/estudiante';
+
+function storageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Guarda usuario + token tras un login correcto. */
+export function saveSession(session: LoginResponse): void {
+  const { token, expiresAt, ...user } = session;
+  try {
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    localStorage.setItem(AUTH_EXPIRES_KEY, expiresAt);
+  } catch {
+    /* almacenamiento bloqueado: no se puede recordar la sesión */
+  }
+}
+
+export function clearSession(): void {
+  try {
+    localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_EXPIRES_KEY);
+  } catch {
+    /* nada que limpiar */
+  }
+}
+
+/** Rol del usuario de la sesión (ADMIN | COORDINADOR | CONSULTA), o null. Solo para mostrar/ocultar acciones: el backend decide. */
+export function getSessionRole(): string | null {
+  try {
+    const user = JSON.parse(storageGet(AUTH_USER_KEY) ?? 'null') as { rol?: unknown } | null;
+    return typeof user?.rol === 'string' ? user.rol : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Token vigente, o null si no hay sesión o ya venció. */
+export function getAuthToken(): string | null {
+  const token = storageGet(AUTH_TOKEN_KEY);
+  if (!token) return null;
+  const expiresAt = Date.parse(storageGet(AUTH_EXPIRES_KEY) ?? '');
+  if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+    clearSession();
+    return null;
+  }
+  return token;
+}
+
+/** Sesión inválida en una ruta protegida: se limpia y se vuelve al login (una sola vez). */
+let redirectingToLogin = false;
+function handleUnauthorized(): void {
+  clearSession();
+  if (redirectingToLogin || window.location.pathname.startsWith('/login')) return;
+  redirectingToLogin = true;
+  window.location.assign(LOGIN_PATH);
+}
+
+/** Mensaje legible cuando el error no trae el JSON del backend (p. ej. HTML de nginx o Vercel). */
+function friendlyHttpMessage(status: number): string {
+  switch (status) {
+    case 401:
+      return 'Su sesión no es válida o venció. Inicie sesión de nuevo.';
+    case 403:
+      return 'No tiene permiso para realizar esta operación.';
+    case 404:
+      return 'No se encontró el recurso solicitado.';
+    case 408:
+    case 504:
+      return 'El servidor tardó demasiado en responder. Si estaba importando, revise el historial antes de reintentar.';
+    case 413:
+      return 'Los archivos son demasiado grandes para el servidor. Suba menos archivos o archivos más pequeños.';
+    case 429:
+      return 'Demasiadas peticiones seguidas. Espere un momento e intente de nuevo.';
+    case 502:
+    case 503:
+      return 'El servidor no está disponible en este momento. Intente de nuevo en unos minutos.';
+    default:
+      return status >= 500 ? `Error del servidor (${status}). Intente de nuevo más tarde.` : `La petición falló (${status}).`;
+  }
+}
+
+/**
+ * Error de la API.
+ *  - kind 'network': no hubo respuesta (backend apagado, URL o CORS incorrectos,
+ *    conexión caída o timeout; en este último caso `code` es 'TIMEOUT').
+ *  - kind 'http': el backend respondió con un código de error; `message` es el
+ *    mensaje legible que envía ({ error: { code, message, details } }).
+ */
+export class ApiError extends Error {
+  readonly kind: 'network' | 'http';
+  readonly status?: number;
+  readonly code?: string;
+  readonly details?: unknown;
+
+  constructor(kind: 'network' | 'http', message: string, extra: { status?: number; code?: string; details?: unknown } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.kind = kind;
+    this.status = extra.status;
+    this.code = extra.code;
+    this.details = extra.details;
+  }
+}
+
+/** Mensaje para mostrar al usuario a partir de cualquier error de una llamada a la API. */
+export function describeApiError(error: unknown, fallback = 'Ocurrió un error inesperado'): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+type RequestOptions = {
+  /** Aborta la petición pasado este tiempo (ApiError kind 'network', code 'TIMEOUT'). */
+  timeoutMs?: number;
+};
+
+async function request<T>(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<T> {
+  let response: Response;
+  // Con FormData el navegador fija `multipart/form-data; boundary=…`: forzar JSON rompería la subida.
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+  const token = getAuthToken();
+  const controller = options.timeoutMs ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : undefined;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      signal: controller?.signal ?? init?.signal,
+      headers: {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    if (controller?.signal.aborted) {
+      throw new ApiError(
+        'network',
+        `El servidor no respondió en ${Math.round((options.timeoutMs ?? 0) / 1000)} segundos.`,
+        { code: 'TIMEOUT' },
+      );
     }
+    throw new ApiError(
+      'network',
+      `No se pudo conectar con el servidor (${API_BASE}). Verifique su conexión y que el backend esté en ejecución.`,
+    );
+  } finally {
+    clearTimeout(timer);
   }
 
+  if (!response.ok) {
+    // Formato del backend: { error: { code, message, details } }. Si la respuesta no es ese
+    // JSON (HTML de un proxy en un 413/502/504, texto vacío…), se usa un mensaje según el código.
+    const text = await response.text().catch(() => '');
+    let message = friendlyHttpMessage(response.status);
+    let code: string | undefined;
+    let details: unknown;
+    try {
+      const json = JSON.parse(text);
+      const err = json?.error;
+      if (err && typeof err === 'object') {
+        message = typeof err.message === 'string' && err.message ? err.message : message;
+        code = err.code;
+        details = err.details;
+        // Errores de validación: se agregan los motivos concretos ("La contraseña debe tener…").
+        if (Array.isArray(details)) {
+          const motivos = details
+            .map((d: { message?: unknown }) => (typeof d?.message === 'string' ? d.message : null))
+            .filter(Boolean);
+          if (motivos.length > 0) message = `${message}: ${motivos.join('; ')}`;
+        }
+      } else if (typeof err === 'string') {
+        message = err;
+      } else if (typeof json?.message === 'string') {
+        message = json.message;
+      }
+    } catch {
+      /* respuesta no JSON: se conserva el mensaje según el código HTTP */
+    }
+    // 401 en una ruta protegida = sesión vencida o inválida. En /auth/* (login fallido) no se redirige.
+    if (response.status === 401 && !path.startsWith('/auth/')) handleUnauthorized();
+    throw new ApiError('http', message, { status: response.status, code, details });
+  }
+
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -290,8 +469,12 @@ export type DashboardSummaryResponse = {
   totalStudentsExternal: number;
   projectsByStatus: Array<{ estado: string; total: string }>;
   trendByYear: Array<{ anio: string; estudiantes: number; proyectos: number }>;
-  genderSummary: { hombres: number; mujeres: number };
+  genderSummary: GenderSummaryResponse;
+  totalMunicipalities?: number;
 };
+
+/** `sinDato`: participantes sin género registrado (el histórico CSS no lo trae). */
+export type GenderSummaryResponse = { hombres: number; mujeres: number; sinDato?: number };
 
 export function getDashboardSummary() {
   return request<DashboardSummaryResponse>('/dashboard/summary');
@@ -333,7 +516,7 @@ export function getStudentsByCarreraAndYear() {
 
 /** Req 2 — Género (también disponible en summary.genderSummary) */
 export function getGenderSummaryAPI() {
-  return request<{ hombres: number; mujeres: number }>('/dashboard/genero');
+  return request<GenderSummaryResponse>('/dashboard/genero');
 }
 
 /** Req 3 — Tendencia anual */
@@ -385,6 +568,7 @@ export type AuthUser = {
   nombre: string;
   apellido: string;
   correo: string;
+  rol?: string;
 };
 
 export function registerUser(payload: RegisterPayload) {
@@ -394,21 +578,22 @@ export function registerUser(payload: RegisterPayload) {
   });
 }
 
+/** Respuesta de POST /auth/login: el usuario más el token de sesión. Guárdela con saveSession(). */
+export type LoginResponse = AuthUser & {
+  token: string;
+  /** ISO 8601. */
+  expiresAt: string;
+};
+
 export function loginUser(payload: LoginPayload) {
-  return request<AuthUser>('/auth/login', {
+  return request<LoginResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export async function removeEnrollment(projectId: string, enrollmentId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/projects/${projectId}/enrollments/${enrollmentId}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as any)?.message ?? 'No se pudo eliminar la inscripción');
-  }
+  await request<void>(`/projects/${projectId}/enrollments/${enrollmentId}`, { method: 'DELETE' });
 }
 
 export function updateStudentEnrollment(
@@ -448,13 +633,7 @@ export function updateInstitution(institutionId: string | number, payload: Updat
 }
 
 export async function deleteProject(projectId: string | number): Promise<void> {
-  const res = await fetch(`${API_BASE}/projects/${projectId}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as any)?.message ?? 'No se pudo eliminar el proyecto');
-  }
+  await request<unknown>(`/projects/${projectId}`, { method: 'DELETE' });
 }
 
 export type CreateInstitutionPayload = {
@@ -491,4 +670,297 @@ export function getFaculties() {
 
 export function getCareers() {
   return request<CareerResponse[]>('/careers');
+}
+// ─── Importación masiva (POST /imports …) ─────────────────────────────────────
+// Contrato del backend: src/modules/imports (horas-sociales-core-backend).
+
+export type ImportBatchEstado = 'PREVISUALIZADO' | 'CONFIRMADO' | 'DESCARTADO';
+export type ImportItemEstado = 'NUEVO' | 'IGNORADO' | 'ADVERTENCIA' | 'CONFLICTO';
+export type ImportItemEntidad = 'INSTITUCION' | 'PROYECTO' | 'ESTUDIANTE' | 'PARTICIPACION' | 'FILA_PDF' | 'FILA_XLS';
+export type ImportItemAccion = 'INSERTAR' | 'COMPLETAR' | 'NINGUNA';
+
+export type ImportConteo = Record<ImportItemEstado, number>;
+
+export type ImportResumen = {
+  total: ImportConteo;
+  porEntidad: Partial<Record<ImportItemEntidad, ImportConteo>>;
+  /** Horas que entrarán con las participaciones nuevas. */
+  horasNuevas: number;
+};
+
+export type ImportConciliacion = {
+  control: string;
+  extraido: number;
+  reporte: number | null;
+  ok: boolean;
+};
+
+export type ImportFile = {
+  archivo: string;
+  estado: 'PROCESADO' | 'RECHAZADO';
+  motivo: string | null;
+  tipo: 'PDF_DETALLE_HORAS' | 'XLS_MEMORIA_LABORES' | null;
+  sha256: string;
+  bytes: number;
+  paginas: number | null;
+  titulo: string | null;
+  periodoDesde: string | null;
+  periodoHasta: string | null;
+  generadoEn: string | null;
+  filas: number;
+  advertencias: string[];
+  conciliacion: ImportConciliacion[];
+  lineasNoReconocidas: { archivo: string; ubicacion: string; texto: string; motivo: string }[];
+};
+
+export type ImportItem = {
+  id: number;
+  entidad: ImportItemEntidad;
+  clave: string;
+  estado: ImportItemEstado;
+  accion: ImportItemAccion;
+  motivos: string[];
+  /** Lo que trae el archivo. */
+  datos: Record<string, unknown>;
+  /** Lo que ya hay en la base (si existe). */
+  existente: Record<string, unknown> | null;
+  /** Campo → valor que se llenará (solo campos vacíos). */
+  completar: Record<string, unknown> | null;
+};
+
+/** Filas escritas por paso al confirmar: { estudiantes_insertados: { n: 1 }, movimientos_de_horas: { n: 1, horas: 600 } } */
+export type ImportResultado = Record<string, { n: number; [extra: string]: number }>;
+
+export type ImportBatchSummary = {
+  id: string;
+  estado: ImportBatchEstado;
+  creadoPor: string;
+  creadoEn: string;
+  expiraEn: string;
+  expirado: boolean;
+  confirmadoPor: string | null;
+  confirmadoEn: string | null;
+  resumen: ImportResumen | Record<string, never>;
+  resultado: ImportResultado | null;
+};
+
+export type ImportBatchListItem = ImportBatchSummary & { archivos: number };
+
+export type ImportBatchDetail = ImportBatchSummary & {
+  archivos: ImportFile[];
+  items: ImportItem[];
+};
+
+/** Sube los archivos (campo "files") y devuelve la vista previa clasificada. No escribe en el maestro. */
+export function uploadImport(formData: FormData) {
+  return request<ImportBatchDetail>('/imports', { method: 'POST', body: formData });
+}
+
+export function getImports(limit = 20) {
+  return request<ImportBatchListItem[]>(`/imports?limit=${limit}`);
+}
+
+export function getImportDetail(id: string, params: { estado?: ImportItemEstado; entidad?: ImportItemEntidad } = {}) {
+  const query = new URLSearchParams();
+  if (params.estado) query.set('estado', params.estado);
+  if (params.entidad) query.set('entidad', params.entidad);
+  const qs = query.toString();
+  return request<ImportBatchDetail>(`/imports/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`);
+}
+
+/** Tiempo máximo de espera de la confirmación (un lote grande puede tardar). */
+export const CONFIRM_TIMEOUT_MS = 60_000;
+
+export type ConfirmImportResult =
+  /** `recuperado`: se perdió la respuesta, pero al consultar el lote ya estaba confirmado. */
+  | { status: 'confirmado'; batch: ImportBatchDetail; recuperado?: boolean }
+  /** 409 PREVIEW_DESACTUALIZADA: la base cambió desde la vista previa; `batch` es la clasificación nueva. */
+  | { status: 'desactualizado'; batch: ImportBatchDetail; message: string }
+  /** Se perdió la respuesta y el lote todavía no figura como confirmado (puede seguir procesándose). */
+  | { status: 'sin_respuesta'; batch: ImportBatchDetail; message: string };
+
+export async function confirmImport(id: string): Promise<ConfirmImportResult> {
+  try {
+    const batch = await request<ImportBatchDetail>(
+      `/imports/${encodeURIComponent(id)}/confirm`,
+      { method: 'POST' },
+      { timeoutMs: CONFIRM_TIMEOUT_MS },
+    );
+    return { status: 'confirmado', batch };
+  } catch (error) {
+    const details = error instanceof ApiError ? (error.details as { code?: string; lote?: ImportBatchDetail } | undefined) : undefined;
+    if (error instanceof ApiError && error.status === 409 && details?.code === 'PREVIEW_DESACTUALIZADA' && details.lote) {
+      return { status: 'desactualizado', batch: details.lote, message: error.message };
+    }
+    if (error instanceof ApiError && error.kind === 'network') {
+      // La conexión se cortó o venció el timeout: el servidor pudo haber confirmado igual.
+      // Se pregunta el estado real del lote en vez de adivinar.
+      let batch: ImportBatchDetail;
+      try {
+        batch = await getImportDetail(id);
+      } catch {
+        throw new ApiError(
+          'network',
+          `${error.message} No se pudo verificar si el lote alcanzó a confirmarse: revise el historial antes de reintentar.`,
+          { code: error.code },
+        );
+      }
+      if (batch.estado === 'CONFIRMADO') return { status: 'confirmado', batch, recuperado: true };
+      return {
+        status: 'sin_respuesta',
+        batch,
+        message:
+          `${error.message} El lote todavía figura como no confirmado; es posible que el servidor siga ` +
+          'procesándolo. Espere un momento y actualice el historial antes de volver a confirmar.',
+      };
+    }
+    throw error;
+  }
+}
+
+export function discardImport(id: string) {
+  return request<void>(`/imports/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ─── Perfil del estudiante y horas manuales ──────────────────────────────────
+// Rutas con sesión (requireAuth). POST /hour-movements exige rol ADMIN o COORDINADOR.
+
+export type HourOrigin = 'IMPORTACION' | 'MANUAL';
+export type HourNaturaleza = 'INTERNA' | 'EXTERNA';
+export type EnrollmentEstado = 'ASIGNADA' | 'EN_CURSO' | 'FINALIZADA' | 'RETIRADA' | 'CANCELADA';
+
+export type StudentHourMovement = {
+  id: string;
+  enrollmentId: string;
+  projectId: string;
+  proyecto: string;
+  institucion: string;
+  horas: number;
+  naturaleza: HourNaturaleza;
+  origen: HourOrigin;
+  /** YYYY-MM-DD */
+  fecha: string;
+  concepto: string | null;
+  descripcion: string | null;
+  registradoPor: { id: string; nombre: string } | null;
+  registradoEn: string;
+};
+
+export type StudentProgress = {
+  requisito: number;
+  horasTotales: number;
+  horasInternas: number;
+  horasExternas: number;
+  horasImportadas: number;
+  horasManuales: number;
+  /** 0–100 truncado; 100 solo con el requisito cumplido. */
+  porcentaje: number;
+  completado: boolean;
+  horasRestantes: number;
+  horasExtra: number;
+};
+
+export type StudentParticipation = {
+  enrollmentId: string;
+  cargo: string;
+  estado: EnrollmentEstado;
+  asignadaEn: string;
+  cerradaEn: string | null;
+  horas: number;
+  horasImportadas: number;
+  horasManuales: number;
+  proyecto: {
+    id: string;
+    titulo: string;
+    naturaleza: HourNaturaleza;
+    estado: 'Activo' | 'En progreso' | 'Cerrado';
+    fechaInicio: string | null;
+    fechaCierre: string | null;
+    esSistema: boolean;
+  };
+  institucion: { id: string; nombre: string; sigla: string | null };
+  movimientos: StudentHourMovement[];
+};
+
+export type StudentProfile = {
+  student: {
+    id: string;
+    carnet: string;
+    nombre: string;
+    nombres: string | null;
+    apellidos: string | null;
+    correoInstitucional: string;
+    emailPersonal: string | null;
+    telefono: string | null;
+    genero: 'Masculino' | 'Femenino' | null;
+    avatarUrl: string | null;
+    activo: boolean;
+    carrera: { id: string; nombre: string };
+    facultad: { id: string; nombre: string } | null;
+  };
+  progreso: StudentProgress;
+  participaciones: StudentParticipation[];
+};
+
+export type ManualHoursPayload = {
+  projectId: string;
+  horas: number;
+  /** Si se omite, se usa la naturaleza del proyecto. */
+  naturaleza?: HourNaturaleza;
+  /** YYYY-MM-DD, no futura. */
+  fechaHoras: string;
+  concepto: string;
+};
+
+export type ManualHoursResult = {
+  profile: StudentProfile;
+  movementId: string;
+  /** true: la misma Idempotency-Key ya se había procesado (no se duplicó). */
+  replayed: boolean;
+};
+
+export async function getStudentIdByCarnet(carnet: string): Promise<string> {
+  const res = await request<{ data: { id: string; carnet: string } }>(
+    `/students/by-carnet/${encodeURIComponent(carnet)}`,
+  );
+  return res.data.id;
+}
+
+export async function getStudentProfile(studentId: string): Promise<StudentProfile> {
+  const res = await request<{ data: StudentProfile }>(`/students/${encodeURIComponent(studentId)}/profile`);
+  return res.data;
+}
+
+/**
+ * Asigna horas manualmente. `idempotencyKey` debe ser el mismo en los reintentos
+ * de un mismo envío: el backend no duplica el movimiento.
+ */
+export async function addManualHours(
+  studentId: string,
+  payload: ManualHoursPayload,
+  idempotencyKey: string,
+): Promise<ManualHoursResult> {
+  const res = await request<{ data: StudentProfile; meta: { movementId: string; replayed: boolean } }>(
+    `/students/${encodeURIComponent(studentId)}/hour-movements`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+    { timeoutMs: 20_000 },
+  );
+  return { profile: res.data, movementId: res.meta.movementId, replayed: res.meta.replayed };
+}
+
+/** Revoca un movimiento MANUAL (403 si es importado del CSS). Devuelve el perfil actualizado. */
+export async function deleteManualHours(
+  studentId: string,
+  movementId: string,
+): Promise<{ profile: StudentProfile; deletedEnrollment: boolean }> {
+  const res = await request<{ data: StudentProfile; meta: { movementId: string; deletedEnrollment: boolean } }>(
+    `/students/${encodeURIComponent(studentId)}/hour-movements/${encodeURIComponent(movementId)}`,
+    { method: 'DELETE' },
+    { timeoutMs: 20_000 },
+  );
+  return { profile: res.data, deletedEnrollment: res.meta.deletedEnrollment };
 }

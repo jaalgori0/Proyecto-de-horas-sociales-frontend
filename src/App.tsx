@@ -7,7 +7,9 @@ import MapaVistaPage from './pages/MapaVistaPage';
 import { InstitucionesPage, InstitucionDetallePage } from './pages/InstitucionesPage';
 import { ProyectosPage, ProyectoDetallePage } from './pages/ProyectosPage';
 import EstudiantesPage from './pages/EstudiantesPage';
+import EstudiantePerfilPage from './pages/EstudiantePerfilPage';
 import DashboardPage from './pages/DashboardPage';
+import ImportarPage from './pages/ImportarPage';
 import type { AuthUser } from './services/api';
 
 function Shell({ activePage }: { activePage: string }) {
@@ -27,7 +29,9 @@ function Shell({ activePage }: { activePage: string }) {
           <Route path="/proyectos" element={<ProyectosPage />} />
           <Route path="/proyectos/:id" element={<ProyectoDetallePage />} />
           <Route path="/estudiantes" element={<EstudiantesPage />} />
+          <Route path="/estudiantes/:carnet" element={<EstudiantePerfilPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/importar" element={<ImportarPage />} />
           <Route path="*" element={<Navigate to="/mapa" replace />} />
         </Routes>
       </main>

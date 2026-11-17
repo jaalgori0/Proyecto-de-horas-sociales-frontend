@@ -1,7 +1,7 @@
 import { LogOut, MapPinned, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import type { AuthUser } from '../services/api';
+import { clearSession, LOGIN_PATH, type AuthUser } from '../services/api';
 
 const navItems = [
   { to: '/mapa', label: 'Vista de mapa' },
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/proyectos', label: 'Proyectos' },
   { to: '/estudiantes', label: 'Estudiantes' },
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/importar', label: 'Importar' },
 ];
 
 function getUserInitials(user: AuthUser | null): string {
@@ -30,7 +31,8 @@ export default function Header({ activePage, user }: HeaderProps){
   const handleLogout = () => {
     setMenuOpen(false);
     setMobileNavOpen(false);
-    navigate('/login/estudiante');
+    clearSession();
+    navigate(LOGIN_PATH);
   };
 
   return (

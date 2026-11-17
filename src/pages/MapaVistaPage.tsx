@@ -1,9 +1,16 @@
 import { CalendarDays, ChevronLeft, MapPinned, Users } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { clasificacionEstado, marcadoresMapa } from '../data/proyectos';
+import { clasificacionEstado } from '../data/proyectos';
 import type { ProyectoMapa } from '../types';
-import { getMapMarkers, getProjectsForMap, getGenderByMunicipio, type ProjectDetailResponse } from '../services/api';
+import { Notice } from '../components/ui';
+import {
+  describeApiError,
+  getMapMarkers,
+  getProjectsForMap,
+  getGenderByMunicipio,
+  type ProjectDetailResponse,
+} from '../services/api';
 import { coordenadasDepartamentos } from '../data/departamentos';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -15,11 +22,26 @@ function normalizeVisibleStatus(status?: string | null): ProyectoMapa['estado'] 
   return 'En progreso';
 }
 
+/** Marcador pintado en el mapa (por departamento o ligado a un proyecto). */
+type MapMarker = {
+  id: string;
+  projectId: string | null;
+  label: string;
+  hombres: number;
+  mujeres: number;
+  lat: number;
+  lng: number;
+};
+
 export default function MapaVistaPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<ProyectoMapa[]>([]);
-  const [markers, setMarkers] = useState<typeof marcadoresMapa>([]);
+  const [markers, setMarkers] = useState<MapMarker[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  // Participantes cuya ubicación no corresponde a un departamento conocido (no se pintan).
+  const [sinUbicacion, setSinUbicacion] = useState(0);
   const [projectDetail, setProjectDetail] = useState<ProjectDetailResponse | null>(null);
 
   const proyectoId = searchParams.get('proyecto') ?? String(projects[0]?.id ?? '');
@@ -45,6 +67,7 @@ export default function MapaVistaPage() {
     async function loadMapData() {
       try {
         setLoadingData(true);
+        setLoadError('');
 
         const [apiProjects, apiMarkers, apiGeneroMunicipio] = await Promise.all([
           getProjectsForMap(),   // trae hombres/mujeres reales desde enrollments
@@ -101,10 +124,20 @@ export default function MapaVistaPage() {
 
         const mappedMarkers = [...departmentMarkers, ...projectMarkers];
 
+        setSinUbicacion(
+          apiGeneroMunicipio
+            .filter((row) => !coordenadasDepartamentos[row.municipio])
+            .reduce((sum, row) => sum + row.hombres + row.mujeres + Number((row as { sinDato?: number }).sinDato ?? 0), 0)
+        );
         setProjects(mappedProjects);
         setMarkers(mappedMarkers);
       } catch (err) {
-        console.error('Error cargando datos del mapa:', err);
+        if (!active) return;
+        // Sin datos de respaldo: el mapa queda vacío y se muestra el error real.
+        setProjects([]);
+        setMarkers([]);
+        setSinUbicacion(0);
+        setLoadError(describeApiError(err, 'No se pudieron cargar los datos del mapa.'));
       } finally {
         if (active) setLoadingData(false);
       }
@@ -112,7 +145,7 @@ export default function MapaVistaPage() {
 
     loadMapData();
     return () => { active = false; };
-  }, []);
+  }, [reloadKey]);
 
   // Cargar detalle cuando se selecciona un proyecto
   useEffect(() => {
@@ -240,6 +273,21 @@ export default function MapaVistaPage() {
             </div>
 
             {loadingData ? <p className="muted" style={{ padding: '0 16px' }}>Cargando proyectos...</p> : null}
+            {!loadingData && loadError ? (
+              <div style={{ padding: '0 16px' }}>
+                <Notice title="No se pudieron cargar los datos del mapa" onRetry={() => setReloadKey((k) => k + 1)}>
+                  {loadError}
+                </Notice>
+              </div>
+            ) : null}
+            {!loadingData && !loadError && sinUbicacion > 0 ? (
+              <div style={{ padding: '0 16px' }}>
+                <Notice variant="info" title="Hay estudiantes sin ubicación en el mapa">
+                  {sinUbicacion} participante{sinUbicacion !== 1 ? 's' : ''} pertenece{sinUbicacion !== 1 ? 'n' : ''} a proyectos sin
+                  departamento registrado y no aparece{sinUbicacion !== 1 ? 'n' : ''} en el mapa.
+                </Notice>
+              </div>
+            ) : null}
 
             <div className="sidebar-projects-list">
               {projects.map((project) => {
