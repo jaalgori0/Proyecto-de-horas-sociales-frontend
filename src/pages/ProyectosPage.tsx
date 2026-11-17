@@ -55,8 +55,9 @@ function mapDetailToProyecto(detail: any): Proyecto {
     descripcion: detail.descripcion ?? detail.resumen ?? '',
     equipo: detail.equipo ?? [],
     cuposTexto: detail.cuposTexto ?? undefined,
-    cuposOcupados: detail.cuposOcupados ?? detail.estudiantesAsignados ?? (detail.estudiantes ? detail.estudiantes.length : undefined),
+    cuposOcupados: detail.cuposOcupados ?? 0,
     cuposTotales: detail.cuposTotales ?? null,
+    estudiantesAsignados: detail.estudiantesAsignados ?? (detail.estudiantes ? detail.estudiantes.length : undefined),
   } as Proyecto;
 }
 
@@ -96,6 +97,7 @@ export function ProyectosPage() {
     cuposTexto: project.cuposTexto,
     cuposOcupados: project.cuposOcupados,
     cuposTotales: project.cuposTotales,
+    estudiantesAsignados: project.estudiantesAsignados ?? project.personas,
   });
 
   async function fetchProjects() {
@@ -129,6 +131,7 @@ export function ProyectosPage() {
         cuposTexto: detail.cuposTexto ?? undefined,
         cuposOcupados: detail.cuposOcupados ?? undefined,
         cuposTotales: detail.cuposTotales ?? null,
+        estudiantesAsignados: detail.estudiantesAsignados ?? (detail.estudiantes ? detail.estudiantes.length : undefined),
       };
       setProjectsData((prev) => prev.map((p) => (String(p.id) === String(projectId) ? mapped : p)));
     } catch {

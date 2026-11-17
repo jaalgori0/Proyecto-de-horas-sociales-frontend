@@ -256,8 +256,12 @@ export type ProjectListResponse = {
   personas?: number;
   status?: string;
   cuposTexto?: string;
+  /** Inscritos que ocupan cupo hoy (ASIGNADA/EN_CURSO). */
   cuposOcupados?: number;
+  /** null = el proyecto no define límite de cupos (p. ej. importados del CSS). */
   cuposTotales?: number | null;
+  /** Inscritos totales, incluidas participaciones finalizadas. */
+  estudiantesAsignados?: number;
 };
 
 export type ProjectMapResponse = {

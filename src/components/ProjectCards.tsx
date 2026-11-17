@@ -16,6 +16,22 @@ function normalizeVisibleStatus(estado: string) {
   return 'En progreso';
 }
 
+/**
+ * Cupos e inscritos tal como los calcula el backend (dinámicos desde project_enrollments):
+ *   - inscritos: participaciones ASIGNADA/EN_CURSO/FINALIZADA (lo que se lista en el proyecto).
+ *   - ocupados:  ASIGNADA/EN_CURSO, las únicas que ocupan cupo hoy.
+ *   - limite:    projects.cupos; null si el proyecto no define cupos (los importados del CSS
+ *                no los traen). Sin límite NO se inventa un total.
+ */
+function resumenCupos(project: Proyecto) {
+  const ocupados = project.cuposOcupados ?? 0;
+  const inscritos = project.estudiantesAsignados ?? ocupados;
+  const limite = project.cuposTotales ?? null;
+  const disponibles = limite != null ? Math.max(limite - ocupados, 0) : null;
+  const cerrado = normalizeVisibleStatus(project.estado) === 'Cerrado';
+  return { ocupados, inscritos, limite, disponibles, puedeInscribir: !cerrado && (disponibles == null || disponibles > 0) };
+}
+
 function EstadoBadge({ estado }: { estado: string }) {
   const visibleEstado = normalizeVisibleStatus(estado);
   const cfg = estadoConfig[visibleEstado] ?? { label: visibleEstado, color: '#6b7280', bg: '#f3f4f6', dot: '#9ca3af' };
@@ -50,7 +66,20 @@ function EstadoBadge({ estado }: { estado: string }) {
 }
 
 // ─── Cupos progress bar ───────────────────────────────────────────────────────
-function CuposBar({ ocupados, totales }: { ocupados: number; totales: number }) {
+function CuposBar({ ocupados, totales, inscritos }: { ocupados: number; totales: number | null; inscritos: number }) {
+  if (totales == null) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '1rem' }}>
+        <span style={{ color: '#687182', fontWeight: 600 }}>
+          <Users size={12} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
+          Sin límite de cupos
+        </span>
+        <span style={{ fontWeight: 700, color: '#1c2433' }}>
+          {ocupados} en curso{inscritos > ocupados ? ` · ${inscritos - ocupados} finalizado${inscritos - ocupados !== 1 ? 's' : ''}` : ''}
+        </span>
+      </div>
+    );
+  }
   const pct = totales > 0 ? Math.min((ocupados / totales) * 100, 100) : 0;
   const full = pct >= 100;
   return (
@@ -106,11 +135,7 @@ export function ProjectListCard({
   project: Proyecto;
   onEnroll?: (project: Proyecto) => void;
 }) {
-  // Ensure totals at least cover current equipo length so the progress bar updates when nuevos estudiantes se agregan
-  const cuposOcupados = project.cuposOcupados ?? project.equipo.length;
-  const cuposMaximos = Math.max(project.cuposTotales ?? 5, project.equipo.length);
-  const cuposDisponibles = Math.max(cuposMaximos - cuposOcupados, 0);
-  const tieneCupos = cuposDisponibles > 0;
+  const { ocupados, inscritos, limite, disponibles, puedeInscribir } = resumenCupos(project);
 
   return (
     <article
@@ -199,16 +224,16 @@ export function ProjectListCard({
 
         {/* Bottom: avatar group + cupos bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4 }}>
-          {project.equipo.length > 0 ? (
+          {inscritos > 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <AvatarGroup count={project.equipo.length} />
+              <AvatarGroup count={inscritos} />
               <span style={{ fontSize: '0.86rem', color: '#687182' }}>
-                {project.equipo.length} inscrito{project.equipo.length !== 1 ? 's' : ''}
+                {inscritos} inscrito{inscritos !== 1 ? 's' : ''}
               </span>
             </div>
           ) : null}
           <div style={{ flex: 1 }}>
-            <CuposBar ocupados={cuposOcupados} totales={cuposMaximos} />
+            <CuposBar ocupados={ocupados} totales={limite} inscritos={inscritos} />
           </div>
         </div>
       </div>
@@ -229,15 +254,15 @@ export function ProjectListCard({
       >
         {/* Cupos disponibles summary */}
         <div style={{ textAlign: 'center', marginBottom: 4 }}>
-          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: tieneCupos ? '#1c2433' : '#dc2626', lineHeight: 1 }}>
-            {cuposDisponibles}
+          <div style={{ fontSize: '1.85rem', fontWeight: 800, color: disponibles === 0 ? '#dc2626' : '#1c2433', lineHeight: 1 }}>
+            {disponibles ?? inscritos}
           </div>
           <div style={{ fontSize: '0.78rem', color: '#9aa3b5', fontWeight: 600, marginTop: 2 }}>
-            {tieneCupos ? 'cupos libres' : 'sin cupos'}
+            {disponibles == null ? `inscrito${inscritos !== 1 ? 's' : ''}` : disponibles > 0 ? 'cupos libres' : 'sin cupos'}
           </div>
         </div>
 
-        {tieneCupos ? (
+        {puedeInscribir ? (
           <button
             className="primary-btn"
             type="button"
@@ -302,9 +327,7 @@ export function ProjectListCard({
 
 // ─── ProjectCompactCard ───────────────────────────────────────────────────────
 export function ProjectCompactCard({ project }: { project: Proyecto }) {
-  const cuposMaximos = project.cuposTotales ?? 5;
-  const cuposOcupados = project.cuposOcupados ?? project.equipo.length;
-  const cuposDisponibles = Math.max(cuposMaximos - cuposOcupados, 0);
+  const { inscritos, disponibles } = resumenCupos(project);
 
   return (
     <article
@@ -337,15 +360,15 @@ export function ProjectCompactCard({ project }: { project: Proyecto }) {
         {project.ubicacion}
       </div>
 
-      {cuposDisponibles > 0 ? (
+      {disponibles != null && disponibles > 0 ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#0d6d3e', fontSize: '0.85rem', fontWeight: 600 }}>
           <Clock size={12} />
-          {cuposDisponibles} cupo{cuposDisponibles !== 1 ? 's' : ''} disponible{cuposDisponibles !== 1 ? 's' : ''}
+          {disponibles} cupo{disponibles !== 1 ? 's' : ''} disponible{disponibles !== 1 ? 's' : ''}
         </div>
       ) : null}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-        <AvatarGroup count={project.equipo.length} />
+        <AvatarGroup count={inscritos} />
         <Link
           to={`/proyectos/${project.id}`}
           style={{
