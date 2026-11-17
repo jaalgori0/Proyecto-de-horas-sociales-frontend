@@ -71,8 +71,13 @@ function getInitials(name: string | null | undefined) {
   return initials || '?';
 }
 
-function normalizeLocation(value: string) {
-  return value.split(',')[0]?.trim() ?? value.trim();
+/** Opción del filtro para proyectos sin ubicación registrada (texto vacío o nulo en la BD). */
+const SIN_UBICACION = 'Sin ubicación';
+
+/** "Soyapango, San Salvador" → "Soyapango"; vacío o nulo → "Sin ubicación" (nunca una opción en blanco). */
+function normalizeLocation(value: string | null | undefined) {
+  const base = (value ?? '').split(',')[0]?.trim() ?? '';
+  return base || SIN_UBICACION;
 }
 
 function normalizeStatus(estado: string) {
@@ -140,7 +145,7 @@ export default function EstudiantesPage() {
             ),
             institution: detail?.institution ?? project.institution ?? project.facultad ?? 'Institución',
             status: normalizeStatus(detail?.status ?? project.status ?? 'En progreso'),
-            ubicacion: project.ubicacion,
+            ubicacion: project.ubicacion?.trim() ?? '',
             ubicacionBase: normalizeLocation(project.ubicacion),
             carreras: Array.from(new Set([
               ...(detail?.carreras ?? []),
@@ -173,10 +178,12 @@ export default function EstudiantesPage() {
     [projects]
   );
 
-  const locationOptions = useMemo(
-    () => ['Todas', ...Array.from(new Set(projects.map((p) => p.ubicacionBase))).sort()],
-    [projects]
-  );
+  // Orden alfabético en español; "Sin ubicación" siempre al final.
+  const locationOptions = useMemo(() => {
+    const bases = new Set(projects.map((p) => p.ubicacionBase));
+    const conUbicacion = [...bases].filter((b) => b !== SIN_UBICACION).sort((a, b) => a.localeCompare(b, 'es'));
+    return ['Todas', ...conUbicacion, ...(bases.has(SIN_UBICACION) ? [SIN_UBICACION] : [])];
+  }, [projects]);
 
   const statusOptions = useMemo(
     () => ['Todos', 'Activo', 'En progreso', 'Cerrado'],
@@ -201,8 +208,10 @@ export default function EstudiantesPage() {
     const sel = locationFilter.trim().toLowerCase();
     const matchesLocation =
       sel === 'todas' ||
-      project.ubicacion.toLowerCase().includes(sel) ||
-      project.ubicacionBase.toLowerCase().includes(sel);
+      (locationFilter === SIN_UBICACION
+        ? project.ubicacionBase === SIN_UBICACION
+        : project.ubicacionBase !== SIN_UBICACION &&
+          (project.ubicacion.toLowerCase().includes(sel) || project.ubicacionBase.toLowerCase().includes(sel)));
     return matchesQuery && matchesFaculty && matchesStatus && matchesLocation;
   });
 
@@ -306,7 +315,7 @@ export default function EstudiantesPage() {
                   <span style={{ color: '#c5ccd8' }}>•</span>
                   <span style={{ color: '#687182', fontSize: '1rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                     <MapPin size={11} />
-                    {project.ubicacion}
+                    {project.ubicacion || SIN_UBICACION}
                   </span>
                 </div>
 

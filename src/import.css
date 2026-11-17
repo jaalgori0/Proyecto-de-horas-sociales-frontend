@@ -330,6 +330,22 @@
   margin-top: 16px;
 }
 
+.imp-template-hint {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.imp-template-warning {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #f5c98b;
+  background: #fff7eb;
+  color: #8a4b00;
+  font-size: 0.85rem;
+}
+
 .imp-howto {
   display: flex;
   align-items: center;

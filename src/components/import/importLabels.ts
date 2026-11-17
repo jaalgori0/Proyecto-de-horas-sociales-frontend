@@ -111,12 +111,28 @@ const motivoLabels: Record<string, string> = {
   descuadre_con_totales: 'No cuadra con el total del reporte',
   lineas_no_reconocidas: 'Líneas no reconocidas',
   archivo_ya_importado_en_lote: 'Este archivo ya se importó en un lote confirmado',
+  // Plantilla de revisión (Excel generado desde los PDF)
+  sin_totales_de_control: 'La plantilla no trae los totales de los PDF de origen',
+  hoja_truncada: 'La hoja es demasiado grande y se leyó solo en parte',
+  carnet_completado_con_ceros: 'Carnet completado con ceros a la izquierda',
+  fecha_leida_como_fecha_de_excel: 'Fecha convertida desde el formato de Excel',
+  fila_agregada_en_revision: 'Fila agregada durante la revisión',
 };
 
 const cellLabels: Record<string, string> = {
   carnet: 'carnet', nombreCompleto: 'nombre', fechaInicio: 'fecha de inicio', fechaFin: 'fecha de fin',
   codInstitucion: 'código', institucion: 'institución', carrera: 'carrera', horasAsignadas: 'horas', estado: 'estado',
 };
+
+/**
+ * Procedencia de una fila. En la plantilla de revisión (Excel) la "línea" es la fila de la
+ * hoja Participaciones (la página es siempre 1): se muestra así para ubicarla en el Excel.
+ */
+export function describeOrigen(archivo: unknown, pagina: unknown, linea: unknown): string {
+  const nombre = typeof archivo === 'string' ? archivo : '';
+  if (/\.xlsx?$/i.test(nombre)) return linea != null ? `${nombre} · fila ${String(linea)} de Participaciones` : nombre;
+  return `${nombre || '—'} · pág. ${pagina ?? '—'}${linea != null ? `, línea ${String(linea)}` : ''}`;
+}
 
 function humanize(code: string): string {
   const text = code.replace(/_/g, ' ');
@@ -129,7 +145,7 @@ export function motivoLabel(motivo: string): string {
   const arg = rest.join(':');
   const base = motivoLabels[code!] ?? humanize(code!);
   if (!arg) return base;
-  if (code === 'celda_dividida_por_posicion') return `${base}: ${cellLabels[arg] ?? arg}`;
+  if (code === 'celda_dividida_por_posicion' || code === 'fecha_leida_como_fecha_de_excel') return `${base}: ${cellLabels[arg] ?? arg}`;
   if (code === 'archivo_ya_importado_en_lote') return base;
   return `${base}: ${arg}`;
 }
@@ -229,7 +245,7 @@ export function describeItem(item: ImportItem): { titulo: string; subtitulo: str
     case 'FILA_PDF':
       return {
         titulo: d.nombre ? String(d.nombre) : d.carnet ? `Carnet ${String(d.carnet)}` : 'Fila sin datos legibles',
-        subtitulo: `${text(d.archivo)} · pág. ${text(d.pagina)}, línea ${text(d.linea)}`,
+        subtitulo: describeOrigen(d.archivo, d.pagina, d.linea),
       };
     case 'FILA_XLS':
       return {
@@ -295,7 +311,7 @@ export function compareItem(item: ImportItem): ComparisonRow[] {
         row('Horas', formatNumber(Number(d.horas ?? 0)), base(e?.horas, (v) => formatNumber(Number(v ?? 0)))),
         row('Inicio', formatDate(d.fechaInicio), base(e?.asignadaEn, formatDate)),
         row('Fin', formatDate(d.fechaFin), base(e?.cerradaEn, formatDate)),
-        row('Origen', `${text(d.archivo)}, pág. ${text(d.pagina)}`, null),
+        row('Origen', describeOrigen(d.archivo, d.pagina, d.linea), null),
       ];
     case 'FILA_PDF':
       return [

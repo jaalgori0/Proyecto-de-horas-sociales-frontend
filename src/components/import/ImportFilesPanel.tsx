@@ -43,7 +43,11 @@ function FileRow({ file }: { file: ImportFile }) {
             {rejected
               ? formatBytes(file.bytes)
               : [
-                  file.tipo === 'PDF_DETALLE_HORAS' ? 'Detalle de horas' : 'Memoria de labores',
+                  file.tipo === 'PDF_DETALLE_HORAS'
+                    ? 'Detalle de horas'
+                    : file.tipo === 'XLSX_PLANTILLA_REVISION'
+                      ? 'Plantilla revisada (detalle de horas)'
+                      : 'Memoria de labores',
                   file.periodoDesde ? `${file.periodoDesde} – ${file.periodoHasta}` : null,
                   `${formatNumber(file.filas)} filas`,
                   file.paginas ? `${file.paginas} pág.` : null,

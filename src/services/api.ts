@@ -137,6 +137,8 @@ export function describeApiError(error: unknown, fallback = 'Ocurrió un error i
 type RequestOptions = {
   /** Aborta la petición pasado este tiempo (ApiError kind 'network', code 'TIMEOUT'). */
   timeoutMs?: number;
+  /** Devuelve la Response tal cual (descargas de archivos) en vez de interpretar JSON. */
+  raw?: boolean;
 };
 
 async function request<T>(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<T> {
@@ -206,6 +208,7 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
     throw new ApiError('http', message, { status: response.status, code, details });
   }
 
+  if (options.raw) return response as unknown as T;
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
@@ -709,7 +712,8 @@ export type ImportFile = {
   archivo: string;
   estado: 'PROCESADO' | 'RECHAZADO';
   motivo: string | null;
-  tipo: 'PDF_DETALLE_HORAS' | 'XLS_MEMORIA_LABORES' | null;
+  /** XLSX_PLANTILLA_REVISION: Excel generado desde los PDF (ver downloadReviewTemplate) y corregido a mano. */
+  tipo: 'PDF_DETALLE_HORAS' | 'XLS_MEMORIA_LABORES' | 'XLSX_PLANTILLA_REVISION' | null;
   sha256: string;
   bytes: number;
   paginas: number | null;
@@ -764,6 +768,36 @@ export type ImportBatchDetail = ImportBatchSummary & {
 /** Sube los archivos (campo "files") y devuelve la vista previa clasificada. No escribe en el maestro. */
 export function uploadImport(formData: FormData) {
   return request<ImportBatchDetail>('/imports', { method: 'POST', body: formData });
+}
+
+export type ReviewTemplateDownload = {
+  blob: Blob;
+  filename: string;
+  /** Participaciones extraídas de los PDF. */
+  filas: number;
+  /** Filas marcadas «Revisar» en la plantilla: cortadas entre páginas o con celdas separadas por posición. */
+  filasConAdvertencias: number;
+  lineasNoReconocidas: number;
+};
+
+/**
+ * PDF «Detalle de Horas por Proyecto» (campo "files") → plantilla Excel para revisar y
+ * corregir antes de importar. No escribe nada en la base. La plantilla corregida se sube
+ * luego con uploadImport como cualquier otro archivo.
+ */
+export async function downloadReviewTemplate(formData: FormData): Promise<ReviewTemplateDownload> {
+  const response = await request<Response>('/imports/review-template', { method: 'POST', body: formData }, { raw: true });
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+  const filename = match ? decodeURIComponent(match[1] ?? match[2]!) : 'plantilla-revision.xlsx';
+  const header = (name: string) => Number(response.headers.get(name) ?? 0) || 0;
+  return {
+    blob: await response.blob(),
+    filename,
+    filas: header('X-Plantilla-Filas'),
+    filasConAdvertencias: header('X-Plantilla-Filas-Con-Advertencias'),
+    lineasNoReconocidas: header('X-Plantilla-Lineas-No-Reconocidas'),
+  };
 }
 
 export function getImports(limit = 20) {
