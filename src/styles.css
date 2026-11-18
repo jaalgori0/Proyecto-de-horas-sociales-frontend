@@ -2529,6 +2529,41 @@ img {
   box-shadow: 0 0 0 5px rgba(11, 99, 255, 0.22), 0 6px 14px rgba(12, 30, 60, 0.22);
 }
 
+/* Despliegue al cruzar el zoom de detalle (MapaVistaPage). Leaflet mueve cada pin con
+   transform; estas clases, puestas solo durante el despliegue, lo vuelven un vuelo.
+   Duracion total = DURACION_DESPLIEGUE_MS (450ms) en MapaVistaPage.tsx. */
+
+/* Hijos saliendo del centroide: el pin se ve desde el arranque (opacidad rapida) y
+   viaja frenando al llegar a su municipio. */
+.leaflet-marker-icon.cluster-anim-entrada {
+  transition: transform 450ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 120ms ease-out;
+}
+
+/* Hijos regresando al centroide: viajan acelerando y se desvanecen al final del recorrido. */
+.leaflet-marker-icon.cluster-anim-salida {
+  transition: transform 450ms cubic-bezier(0.55, 0.06, 0.68, 0.19), opacity 150ms ease-in 300ms;
+}
+
+/* Pin del departamento: se retira al empezar el despliegue y reaparece cuando sus hijos llegan. */
+.leaflet-marker-icon.cluster-anim-desvanecer {
+  transition: opacity 180ms ease-out;
+}
+
+.leaflet-marker-icon.cluster-anim-aparecer {
+  transition: opacity 180ms ease-out 300ms;
+}
+
+/* Durante el despliegue los tooltips quedarian desfasados de su pin: se ocultan. */
+.clusters-animando .leaflet-tooltip-pane {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-marker-icon[class*='cluster-anim-'] {
+    transition: none;
+  }
+}
+
 .leaflet-tooltip.place-tooltip {
   border-radius: 8px;
   border: 1px solid rgba(20, 30, 60, 0.1);
@@ -2600,6 +2635,41 @@ img {
 
 .map-place-clear:hover {
   background: #f5f8ff;
+}
+
+/* Chips de municipio del encabezado: mismo filtro que el clic en un pin de municipio. */
+.map-place-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.map-place-chip {
+  padding: 3px 10px;
+  border: 1px solid rgba(11, 99, 255, 0.25);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0b3fa8;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.map-place-chip:hover {
+  background: rgba(11, 99, 255, 0.06);
+}
+
+.map-place-chip.is-active {
+  border-color: #0b63ff;
+  background: #0b63ff;
+  color: #ffffff;
+}
+
+/* Grupo de municipios que chocarian en pantalla: caja "apilada" (clic = acercar). */
+.gender-marker.is-group .marker-box {
+  box-shadow: 4px 4px 0 -1px #ffffff, 4px 4px 0 0 rgba(11, 99, 255, 0.25), 0 8px 20px rgba(12, 30, 60, 0.12);
 }
 
 .map-place-link {
