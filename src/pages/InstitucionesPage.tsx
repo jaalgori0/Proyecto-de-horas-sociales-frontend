@@ -420,10 +420,12 @@ export function InstitucionDetallePage() {
           <div className="institution-meta">
             <span className="eyebrow-tag">Universidad destacada</span>
             <h1>{institution.nombre}</h1>
-            <p>{institution.descripcion}</p>
           </div>
         </div>
         <InstitutionContactInfo institution={institution} />
+        {institution.descripcion?.trim() ? (
+          <p className="institution-description">{institution.descripcion}</p>
+        ) : null}
         <div className="stats-row">
           <div className="stat-block">
             <strong>{institution.totalProyectosActivos}</strong>

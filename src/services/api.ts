@@ -549,13 +549,21 @@ export type TablaInstitucionRow = {
 // ── Llamadas API ─────────────────────────────────────────────────────────────
 
 /** Req 1 — Alumnos en horas sociales por carrera y año */
-export function getStudentsByCarreraAndYear() {
-  return request<CarreraAnioRow[]>('/dashboard/carrera-anio');
+/**
+ * Por carrera y año. 'estudiantes' = personas distintas; 'participaciones' =
+ * inscripciones (un estudiante en 3 proyectos cuenta 3).
+ */
+export type CarreraAnioMetrica = 'estudiantes' | 'participaciones';
+
+export function getStudentsByCarreraAndYear(metrica: CarreraAnioMetrica = 'estudiantes') {
+  return request<CarreraAnioRow[]>(`/dashboard/carrera-anio?metrica=${metrica}`);
 }
 
 /** Req 2 — Género (también disponible en summary.genderSummary) */
-export function getGenderSummaryAPI() {
-  return request<GenderSummaryResponse>('/dashboard/genero');
+/** Sin `facultyId`: todas las facultades. Con él: solo estudiantes de esa facultad (por su carrera). */
+export function getGenderSummaryAPI(facultyId?: string | number) {
+  const query = facultyId ? `?facultyId=${encodeURIComponent(String(facultyId))}` : '';
+  return request<GenderSummaryResponse>(`/dashboard/genero${query}`);
 }
 
 /** Req 3 — Tendencia anual */

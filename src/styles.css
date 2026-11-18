@@ -3136,6 +3136,14 @@ img {
   max-width: 720px;
 }
 
+/* Descripción de la institución: bajo el bloque de contacto, antes de los contadores */
+.institution-description {
+  margin: 18px 0 0;
+  max-width: 820px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 /* Ubicación y contacto de la institución (detalle) */
 .institution-contact-grid {
   display: grid;

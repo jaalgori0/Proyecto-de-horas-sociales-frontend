@@ -22,6 +22,7 @@ import {
   getStudentsInMultipleProjects,
   getTrendByYear,
   getGenderSummaryAPI,
+  getFaculties,
   type DashboardSummaryResponse,
   type GenderSummaryResponse,
   type InstitutionListResponse,
@@ -32,6 +33,8 @@ import {
   type ProyectosMunicipioRow,
   type TablaInstitucionRow,
   type EstudianteMultiProyectoRow,
+  type CarreraAnioMetrica,
+  type FacultyResponse,
   type TrendYearRow,
 } from '../services/api';
 
@@ -51,7 +54,7 @@ const PALETTE = [C.blue, C.green, C.pink, C.purple, C.yellow, C.teal, C.orange, 
 
 const SIN_UBICACION = 'Sin ubicación';
 /** Secciones que carga el dashboard (una llamada a la API cada una). */
-const TOTAL_SECCIONES = 11;
+const TOTAL_SECCIONES = 12;
 /** Alto por fila de los gráficos de barras horizontales (crecen con los datos; el scroll lo absorbe la tarjeta). */
 const BAR_ROW_PX = 30;
 const barChartHeight = (rows: number, min = 220) => Math.max(min, rows * BAR_ROW_PX + 60);
@@ -136,14 +139,17 @@ function KpiCard({ icon, label, value, sub, color }: {
   );
 }
 
-function ChartCard({ title, subtitle, children, className = '', exportId }: {
+function ChartCard({ title, subtitle, children, className = '', exportId, headerExtra }: {
   title: string; subtitle?: string; children: React.ReactNode; className?: string; exportId?: string;
+  /** Controles/resumen del encabezado: quedan fijos, fuera del scroll interno. */
+  headerExtra?: React.ReactNode;
 }) {
   return (
     <div className={`dash-chart-card ${className}`} {...(exportId ? { 'data-export-id': exportId } : {})}>
       <div className="dash-chart-header">
         <h3 className="dash-chart-title">{title}</h3>
         {subtitle && <p className="dash-chart-subtitle">{subtitle}</p>}
+        {headerExtra}
       </div>
       {/* Contenido completo (sin recortes) con scroll interno: la página no crece sin límite. */}
       <div className="dash-scroll">{children}</div>
@@ -166,7 +172,29 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 // Req 1 — Gráfico con selector de año
-function CarrerasChart({ data: source }: { data: CarreraAnioRow[] }) {
+const CARRERA_METRICAS: Record<CarreraAnioMetrica, { tab: string; serie: string; total: string; vacio: string }> = {
+  estudiantes: {
+    tab: 'Estudiantes únicos',
+    serie: 'Estudiantes',
+    total: 'estudiantes únicos',
+    vacio: 'No hay estudiantes con participaciones registradas para mostrar.',
+  },
+  participaciones: {
+    tab: 'Participaciones totales',
+    serie: 'Participaciones',
+    total: 'participaciones (incluye a un mismo estudiante en varios proyectos)',
+    vacio: 'No hay participaciones registradas para mostrar.',
+  },
+};
+
+function CarrerasChart({ estudiantes, participaciones }: {
+  estudiantes: CarreraAnioRow[];
+  participaciones: CarreraAnioRow[];
+}) {
+  const [metrica, setMetrica] = useState<CarreraAnioMetrica>('estudiantes');
+  const source = metrica === 'estudiantes' ? estudiantes : participaciones;
+  const labels = CARRERA_METRICAS[metrica];
+
   // Calcula dinámicamente qué años existen en los datos (solo claves de 4 dígitos)
   const availableYears = useMemo(() => {
     const yearsSet = new Set<string>();
@@ -191,16 +219,39 @@ function CarrerasChart({ data: source }: { data: CarreraAnioRow[] }) {
   const data = source
     .map((d) => ({ carrera: d.carrera, alumnos: Number(d[anio] ?? 0) }))
     .sort((a, b) => b.alumnos - a.alumnos);
+  // Cada estudiante tiene una sola carrera: la suma de la columna es el total exacto del año.
+  const totalAnio = data.reduce((sum, d) => sum + d.alumnos, 0);
 
   return (
     <ChartCard
       title="Alumnos en Horas Sociales por Carrera y Año"
       subtitle="Número de estudiantes realizando horas sociales, filtrando por año académico"
       exportId="chart-carreras"
+      headerExtra={
+        <div className="dash-metric-bar">
+          <div className="dash-metric-toggle" role="tablist" aria-label="Tipo de conteo">
+            {(Object.keys(CARRERA_METRICAS) as CarreraAnioMetrica[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={metrica === m}
+                className={`dash-year-btn ${metrica === m ? 'active' : ''}`}
+                onClick={() => setMetrica(m)}
+              >
+                {CARRERA_METRICAS[m].tab}
+              </button>
+            ))}
+          </div>
+          {anio ? (
+            <p className="dash-metric-total">
+              Total {anio}: <strong>{totalAnio.toLocaleString('es-SV')}</strong> {labels.total}
+            </p>
+          ) : null}
+        </div>
+      }
     >
-      {source.length === 0 ? (
-        <p className="empty-chart">No hay estudiantes con participaciones registradas para mostrar.</p>
-      ) : null}
+      {source.length === 0 ? <p className="empty-chart">{labels.vacio}</p> : null}
       <div className="dash-year-selector">
         {availableYears.map((y) => (
           <button key={y} type="button" className={`dash-year-btn ${anio === y ? 'active' : ''}`} onClick={() => setAnio(y)}>
@@ -214,11 +265,132 @@ function CarrerasChart({ data: source }: { data: CarreraAnioRow[] }) {
           <XAxis type="number" tick={{ fontSize: 12 }} />
           <YAxis type="category" dataKey="carrera" tick={{ fontSize: 11 }} width={96} interval={0} />
           <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="alumnos" name="Alumnos" radius={[0, 6, 6, 0]}>
+          <Bar dataKey="alumnos" name={labels.serie} radius={[0, 6, 6, 0]}>
             {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+    </ChartCard>
+  );
+}
+
+// Req 2 — Género, con filtro por facultad
+const TODAS_LAS_FACULTADES = '';
+
+function GeneroChart({ general }: { general: { hombres: number; mujeres: number; sinDato: number } }) {
+  const [faculties, setFaculties] = useState<FacultyResponse[]>([]);
+  const [facultyId, setFacultyId] = useState<string>(TODAS_LAS_FACULTADES);
+  const [filtrado, setFiltrado] = useState<{ hombres: number; mujeres: number; sinDato: number } | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    getFaculties()
+      .then((list) => setFaculties([...list].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))))
+      .catch(() => setFaculties([]));
+  }, []);
+
+  // "Todas" usa el total ya cargado por el dashboard; una facultad se consulta al backend.
+  useEffect(() => {
+    if (facultyId === TODAS_LAS_FACULTADES) {
+      setFiltrado(null);
+      setError('');
+      return;
+    }
+    let active = true;
+    setCargando(true);
+    setError('');
+    getGenderSummaryAPI(facultyId)
+      .then((g) => {
+        if (active) setFiltrado({ hombres: g.hombres ?? 0, mujeres: g.mujeres ?? 0, sinDato: Number(g.sinDato ?? 0) });
+      })
+      .catch((err) => {
+        if (active) setError(describeApiError(err, 'No se pudo cargar el género de la facultad.'));
+      })
+      .finally(() => {
+        if (active) setCargando(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [facultyId]);
+
+  const datos = filtrado ?? general;
+  const total = datos.hombres + datos.mujeres;
+  const hayGenero = total > 0;
+  const pctH = hayGenero ? Math.round((datos.hombres / total) * 100) : 0;
+  const pctM = hayGenero ? 100 - pctH : 0;
+  const pieData = [
+    { name: 'Hombres', value: datos.hombres },
+    { name: 'Mujeres', value: datos.mujeres },
+  ];
+  const facultadNombre = faculties.find((f) => String(f.id) === facultyId)?.nombre;
+
+  return (
+    <ChartCard
+      title="Hombres y Mujeres en Horas Sociales"
+      subtitle={
+        facultadNombre
+          ? `Distribución por género de los estudiantes de ${facultadNombre}`
+          : 'Distribución por género de los estudiantes en servicio social externo'
+      }
+      exportId="chart-genero"
+      headerExtra={
+        <div className="dash-metric-bar">
+          <label className="dash-select-label">
+            <span>Facultad</span>
+            <select
+              className="dash-select"
+              value={facultyId}
+              onChange={(e) => setFacultyId(e.target.value)}
+              disabled={faculties.length === 0}
+            >
+              <option value={TODAS_LAS_FACULTADES}>Todas las facultades</option>
+              {faculties.map((f) => (
+                <option key={f.id} value={String(f.id)}>{f.nombre}</option>
+              ))}
+            </select>
+          </label>
+          {!error ? (
+            <p className="dash-metric-total">
+              {cargando ? 'Cargando…' : <>Total: <strong>{total.toLocaleString('es-SV')}</strong> estudiantes</>}
+            </p>
+          ) : null}
+        </div>
+      }
+    >
+      {error ? (
+        <p className="empty-chart">{error}</p>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="50%" innerRadius={65} outerRadius={100} paddingAngle={4} dataKey="value">
+                <Cell fill={C.blue} />
+                <Cell fill={C.pink} />
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+          {hayGenero ? (
+            <div className="dash-gender-bar">
+              <div className="dash-gender-segment men" style={{ width: `${pctH}%` }}><span>{pctH}% H</span></div>
+              <div className="dash-gender-segment women" style={{ width: `${pctM}%` }}><span>{pctM}% M</span></div>
+            </div>
+          ) : (
+            <p className="empty-chart">
+              {facultadNombre ? `No hay datos de género registrados en ${facultadNombre}` : 'No hay datos de género registrados'}
+              {datos.sinDato > 0 ? ` (${datos.sinDato} estudiantes sin este dato)` : ''}.
+            </p>
+          )}
+          {hayGenero && datos.sinDato > 0 ? (
+            <p className="muted" style={{ fontSize: '0.85rem', margin: '8px 0 0' }}>
+              {datos.sinDato} estudiantes no tienen género registrado y no se incluyen.
+            </p>
+          ) : null}
+        </>
+      )}
     </ChartCard>
   );
 }
@@ -288,6 +460,7 @@ export default function DashboardPage() {
   const [apiMarkers, setApiMarkers] = useState<MapMarkerResponse[]>([]);
   const [apiSummary, setApiSummary] = useState<DashboardSummaryResponse | null>(null);
   const [apiCarreraAnio, setApiCarreraAnio] = useState<CarreraAnioRow[]>([]);
+  const [apiCarreraAnioParticipaciones, setApiCarreraAnioParticipaciones] = useState<CarreraAnioRow[]>([]);
   const [apiEstudiantesMunicipio, setApiEstudiantesMunicipio] = useState<EstudiantesMunicipioRow[]>([]);
   const [apiProyectosMunicipio, setApiProyectosMunicipio] = useState<ProyectosMunicipioRow[]>([]);
   const [apiInstitucionTabla, setApiInstitucionTabla] = useState<TablaInstitucionRow[]>([]);
@@ -345,12 +518,14 @@ export default function DashboardPage() {
         intentar('Instituciones', getInstitutions, setApiInstitutions),
         intentar('Marcadores del mapa', getMapMarkers, setApiMarkers),
         intentar('Resumen', getDashboardSummary, setApiSummary),
-        intentar('Alumnos por carrera y año', getStudentsByCarreraAndYear, (rows) => setApiCarreraAnio(sanitizeCarreraAnio(rows))),
+        intentar('Alumnos por carrera y año', () => getStudentsByCarreraAndYear('estudiantes'), (rows) => setApiCarreraAnio(sanitizeCarreraAnio(rows))),
+        intentar('Participaciones por carrera y año', () => getStudentsByCarreraAndYear('participaciones'), (rows) =>
+          setApiCarreraAnioParticipaciones(sanitizeCarreraAnio(rows))),
         intentar('Estudiantes por municipio', getStudentsByMunicipio, setApiEstudiantesMunicipio),
         intentar('Proyectos por municipio', getProjectsByMunicipio, setApiProyectosMunicipio),
         intentar('Tabla por institución', getInstitutionDetailTable, setApiInstitucionTabla),
         intentar('Tendencia anual', getTrendByYear, setApiTendencia),
-        intentar('Género', getGenderSummaryAPI, setApiGenero),
+        intentar('Género', () => getGenderSummaryAPI(), setApiGenero),
         intentar('Estudiantes en varios proyectos', getStudentsInMultipleProjects, setApiMultiProyecto),
       ]);
 
@@ -446,38 +621,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Req 1 — Alumnos por carrera y año */}
-      <CarrerasChart data={apiCarreraAnio} />
+      <CarrerasChart estudiantes={apiCarreraAnio} participaciones={apiCarreraAnioParticipaciones} />
 
       {/* Req 2 — Género + Tendencia anual */}
       <div className="dash-grid-2">
-         <ChartCard title="Hombres y Mujeres en Horas Sociales" subtitle="Distribución por género de los estudiantes en servicio social externo" exportId="chart-genero">
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie data={metrics.generoData} cx="50%" cy="50%" innerRadius={65} outerRadius={100} paddingAngle={4} dataKey="value">
-                <Cell fill={C.blue} />
-                <Cell fill={C.pink} />
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-          {hayGenero ? (
-            <div className="dash-gender-bar">
-              <div className="dash-gender-segment men" style={{ width: `${pctH}%` }}><span>{pctH}% H</span></div>
-              <div className="dash-gender-segment women" style={{ width: `${pctM}%` }}><span>{pctM}% M</span></div>
-            </div>
-          ) : (
-            <p className="empty-chart">
-              No hay datos de género registrados
-              {metrics.totalSinGenero > 0 ? ` (${metrics.totalSinGenero} estudiantes sin este dato)` : ''}.
-            </p>
-          )}
-          {hayGenero && metrics.totalSinGenero > 0 ? (
-            <p className="muted" style={{ fontSize: '0.85rem', margin: '8px 0 0' }}>
-              {metrics.totalSinGenero} estudiantes no tienen género registrado y no se incluyen.
-            </p>
-          ) : null}
-        </ChartCard>
+        <GeneroChart
+          general={{ hombres: metrics.totalHombres, mujeres: metrics.totalMujeres, sinDato: metrics.totalSinGenero }}
+        />
 
         <ChartCard title="Tendencia Anual de Estudiantes Externos" subtitle="Evolución histórica de la participación en servicio social por año" exportId="chart-tendencia">
           <ResponsiveContainer width="100%" height={260}>

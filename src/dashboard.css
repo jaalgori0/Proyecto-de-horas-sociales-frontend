@@ -331,3 +331,31 @@
 .dash-tooltip-wide { max-width: 340px; }
 .dash-tooltip-list { margin: 6px 0 0; padding-left: 16px; font-size: 0.78rem; color: #4b5670; }
 .dash-tooltip-list li { margin: 1px 0; }
+
+/* Selector de conteo (estudiantes únicos / participaciones) + total del año */
+.dash-metric-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 14px;
+}
+.dash-metric-toggle { display: flex; flex-wrap: wrap; gap: 8px; }
+.dash-metric-total { margin: 0; font-size: 0.88rem; color: var(--muted); }
+.dash-metric-total strong { color: var(--text); font-size: 1.05rem; }
+
+/* Selector de facultad (tarjeta de género) */
+.dash-select-label { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; color: var(--muted); min-width: 0; }
+.dash-select {
+  max-width: 100%;
+  min-width: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.dash-select:focus { outline: 2px solid color-mix(in srgb, var(--blue) 35%, transparent); border-color: var(--blue); }
