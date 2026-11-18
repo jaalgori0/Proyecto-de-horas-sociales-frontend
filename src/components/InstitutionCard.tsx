@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin as MapPinned } from 'lucide-react';
+import { MapPin as MapPinned, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { Institucion } from '../types';
 
@@ -45,6 +45,16 @@ export default function InstitutionCard({
           <div className="uca-card-location">
             <MapPinned size={14} />
             <span>{institution.ubicacion}</span>
+          </div>
+        ) : null}
+
+        {institution.telefono?.trim() ? (
+          <div className="uca-card-location">
+            <Phone size={14} />
+            <span>
+              {institution.telefono}
+              {institution.contactoNombre?.trim() ? ` · ${institution.contactoNombre}` : ''}
+            </span>
           </div>
         ) : null}
 

@@ -213,6 +213,16 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
   return response.json() as Promise<T>;
 }
 
+// ─── Clasificación de proyectos (no excluyentes) ─────────────────────────────
+export const PROJECT_CLASIFICACIONES = ['SS_INTERNO', 'SS_EXTERNO', 'PROFESIONALIZANTE', 'CONTACTO_REALIDAD'] as const;
+export type ProjectClasificacion = (typeof PROJECT_CLASIFICACIONES)[number];
+export const PROJECT_CLASIFICACION_LABELS: Record<ProjectClasificacion, string> = {
+  SS_INTERNO: 'Servicio social interno',
+  SS_EXTERNO: 'Servicio social externo',
+  PROFESIONALIZANTE: 'Profesionalizante',
+  CONTACTO_REALIDAD: 'Contacto con la realidad',
+};
+
 export type CreateProjectPayload = {
   institutionId?: string;
   institutionName: string;
@@ -223,6 +233,8 @@ export type CreateProjectPayload = {
   facultad: string;
   carreras: string[];
   titulo: string;
+  /** Al menos una. Las horas se registran como internas si incluye SS_INTERNO. */
+  clasificaciones: ProjectClasificacion[];
   ubicacion: string;
   descripcion: string;
   resumen?: string;
@@ -265,6 +277,7 @@ export type ProjectListResponse = {
   cuposTotales?: number | null;
   /** Inscritos totales, incluidas participaciones finalizadas. */
   estudiantesAsignados?: number;
+  clasificaciones?: ProjectClasificacion[];
 };
 
 export type ProjectMapResponse = {
@@ -299,6 +312,10 @@ export type InstitutionListResponse = {
   nombre: string;
   tipo?: string | null;
   ubicacion: string;
+  direccion?: string | null;
+  contactoNombre?: string | null;
+  contactoEmail?: string | null;
+  telefono?: string | null;
   image?: string | null;
   totalProyectosActivos: number;
   totalEstudiantesAsignados: number;
@@ -317,7 +334,12 @@ export type InstitutionDetailResponse = {
   image?: string | null;
   tipo?: string | null;
   nombre: string;
+  sigla?: string | null;
   ubicacion: string;
+  direccion?: string | null;
+  contactoNombre?: string | null;
+  contactoEmail?: string | null;
+  telefono?: string | null;
   descripcion: string;
   totalProyectosActivos: number;
   totalEstudiantesAsignados: number;
@@ -365,6 +387,7 @@ export type ProjectDetailResponse = {
   hombres?: number;
   mujeres?: number;
   desplegados?: string | null;
+  clasificaciones?: ProjectClasificacion[];
 };
 
 export function parseCsvList(value: string) {
@@ -400,6 +423,7 @@ export type UpdateProjectPayload = {
   facultad?: string;
   carreras?: string[];
   titulo?: string;
+  clasificaciones?: ProjectClasificacion[];
   ubicacion?: string;
   descripcion?: string;
   resumen?: string;
@@ -480,6 +504,8 @@ export type DashboardSummaryResponse = {
   totalActiveEnrollments: number;
   totalMarkers: number;
   totalStudentsExternal: number;
+  /** Estudiantes con participación en 2+ proyectos (historial completo). */
+  totalStudentsMultiProject?: number;
   projectsByStatus: Array<{ estado: string; total: string }>;
   trendByYear: Array<{ anio: string; estudiantes: number; proyectos: number }>;
   genderSummary: GenderSummaryResponse;
@@ -557,6 +583,23 @@ export function getInstitutionDetailTable() {
   return request<TablaInstitucionRow[]>('/dashboard/tabla-institucion');
 }
 
+/** Estudiante con 2+ proyectos (historial completo, sin el proyecto de sistema). */
+export type EstudianteMultiProyectoRow = {
+  studentId: string;
+  nombre: string;
+  carnet: string;
+  carrera: string;
+  /** Proyectos distintos en los que participa o participó. */
+  proyectos: number;
+  /** De ellos, con participación activa hoy. */
+  activos: number;
+  titulos: string[];
+};
+
+export function getStudentsInMultipleProjects() {
+  return request<EstudianteMultiProyectoRow[]>('/dashboard/estudiantes-multiproyecto');
+}
+
 /** Género por municipio (para marcadores del mapa) */
 export type GeneroMunicipioRow = { municipio: string; hombres: number; mujeres: number };
 
@@ -630,9 +673,16 @@ export function updateStudentEnrollment(
   });
 }
 
-export type UpdateInstitutionPayload = {
+export type InstitutionContactPayload = {
+  contactoNombre?: string | null;
+  contactoEmail?: string | null;
+  telefono?: string | null;
+};
+
+export type UpdateInstitutionPayload = InstitutionContactPayload & {
   nombre?: string;
   ubicacion?: string;
+  direccion?: string | null;
   descripcion?: string;
   tipo?: string | null;
   image_url?: string | null;
@@ -649,17 +699,18 @@ export async function deleteProject(projectId: string | number): Promise<void> {
   await request<unknown>(`/projects/${projectId}`, { method: 'DELETE' });
 }
 
-export type CreateInstitutionPayload = {
+export type CreateInstitutionPayload = InstitutionContactPayload & {
   nombre: string;
-  sigla: string;
+  sigla?: string;
   ubicacion: string;
+  direccion?: string;
   tipo?: string;
   descripcion: string;
   image_url?: string | null;
 };
 
 export function createInstitution(payload: CreateInstitutionPayload) {
-  return request('/institutions', {
+  return request<InstitutionDetailResponse>('/institutions', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

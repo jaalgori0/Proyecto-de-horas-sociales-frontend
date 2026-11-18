@@ -2,7 +2,8 @@ import { Building2, CalendarDays, ImagePlus, Layers3, MapPinned, Plus, X } from 
 import { useEffect, useRef, useState } from 'react';
 import { toDataUrl, updateProject, getFaculties, getCareers } from '../services/api';
 import { Field } from './ui';
-import type { ProjectDetailResponse, FacultyResponse, CareerResponse } from '../services/api';
+import type { ProjectDetailResponse, FacultyResponse, CareerResponse, ProjectClasificacion } from '../services/api';
+import ProjectClassificationsField from './ProjectClassificationsField';
 import { Trash2, Pencil } from 'lucide-react';
 import EditStudentModal, { type EnrolledStudent } from './EditStudentModal';
 import { removeEnrollment, updateStudentEnrollment } from '../services/api';
@@ -74,6 +75,9 @@ export default function EditProjectModal({
   const [selectedCareerIds, setSelectedCareerIds] = useState<string[]>([]);
 
   const [title, setTitle] = useState(project.titulo ?? project.nombre ?? '');
+  const [clasificaciones, setClasificaciones] = useState<ProjectClasificacion[]>(
+    project.clasificaciones?.length ? project.clasificaciones : ['SS_EXTERNO'],
+  );
   const [location, setLocation] = useState(project.ubicacion ?? '');
   const [startDate, setStartDate] = useState(project.fechaInicio?.slice(0, 10) ?? '');
   const [endDate, setEndDate] = useState(project.fechaCierre?.slice(0, 10) ?? '');
@@ -152,6 +156,14 @@ export default function EditProjectModal({
     setIsSaving(true);
     setError(null);
 
+    if (clasificaciones.length === 0) {
+      const msg = 'Seleccione al menos una clasificación del proyecto';
+      setError(msg);
+      showToast(msg, 'error');
+      setIsSaving(false);
+      return;
+    }
+
     if (selectedCareerIds.length === 0) {
       const msg = 'Agrega al menos una carrera';
       setError(msg);
@@ -176,6 +188,7 @@ export default function EditProjectModal({
         facultad: currentFacultyName,
         carreras: careerNames,
         titulo: title,
+        clasificaciones,
         ubicacion: location,
         descripcion: description,
         fechaInicio: startDate || undefined,
@@ -367,6 +380,7 @@ export default function EditProjectModal({
               </div>
 
               <Field label="Nombre del proyecto" placeholder="Ej. Campaña de salud comunitaria" icon={<Plus size={18} />} value={title} onChange={(e) => setTitle(e.target.value)} required />
+              <ProjectClassificationsField value={clasificaciones} onChange={setClasificaciones} />
               <Field label="Ubicación" placeholder="Municipio / departamento" icon={<MapPinned size={18} />} value={location} onChange={(e) => setLocation(e.target.value)} required />
               <Field label="Fecha de inicio" placeholder="" type="date" icon={<CalendarDays size={18} />} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               <Field label="Fecha de cierre" placeholder="" type="date" icon={<CalendarDays size={18} />} value={endDate} onChange={(e) => setEndDate(e.target.value)} />

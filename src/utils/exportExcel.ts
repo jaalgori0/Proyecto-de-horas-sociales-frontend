@@ -109,11 +109,18 @@ export async function exportToExcelFormatted(
     'chart-carreras', 'chart-genero', 'chart-tendencia',
     'chart-municipios-estudiantes', 'chart-municipios-proyectos', 'chart-instituciones',
   ];
-  for (const id of chartIds) {
-    const el = document.querySelector<HTMLElement>(`[data-export-id="${id}"]`);
-    if (el) {
-      try { chartCaptures[id] = await captureEl(el); } catch { /* skip */ }
+  // Los gráficos del dashboard tienen scroll interno (.dash-scroll): durante la
+  // captura se despliegan completos para que la imagen no salga recortada.
+  document.body.classList.add('dash-exporting');
+  try {
+    for (const id of chartIds) {
+      const el = document.querySelector<HTMLElement>(`[data-export-id="${id}"]`);
+      if (el) {
+        try { chartCaptures[id] = await captureEl(el); } catch { /* skip */ }
+      }
     }
+  } finally {
+    document.body.classList.remove('dash-exporting');
   }
 
   const wb = new ExcelJS.Workbook();

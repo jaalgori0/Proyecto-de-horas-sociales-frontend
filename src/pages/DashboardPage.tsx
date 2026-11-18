@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line,
+  PieChart, Pie, Cell, Legend, LineChart, Line, LabelList,
 } from 'recharts';
 import {
   Download, FileSpreadsheet, Users, BookOpen,
@@ -19,6 +19,7 @@ import {
   getStudentsByMunicipio,
   getProjectsByMunicipio,
   getInstitutionDetailTable,
+  getStudentsInMultipleProjects,
   getTrendByYear,
   getGenderSummaryAPI,
   type DashboardSummaryResponse,
@@ -30,6 +31,7 @@ import {
   type EstudiantesMunicipioRow,
   type ProyectosMunicipioRow,
   type TablaInstitucionRow,
+  type EstudianteMultiProyectoRow,
   type TrendYearRow,
 } from '../services/api';
 
@@ -48,8 +50,11 @@ const C = {
 const PALETTE = [C.blue, C.green, C.pink, C.purple, C.yellow, C.teal, C.orange, C.red];
 
 const SIN_UBICACION = 'Sin ubicación';
-/** Instituciones que se grafican en "Métricas por institución" (la tabla muestra todas). */
-const TOP_INSTITUCIONES = 15;
+/** Secciones que carga el dashboard (una llamada a la API cada una). */
+const TOTAL_SECCIONES = 11;
+/** Alto por fila de los gráficos de barras horizontales (crecen con los datos; el scroll lo absorbe la tarjeta). */
+const BAR_ROW_PX = 30;
+const barChartHeight = (rows: number, min = 220) => Math.max(min, rows * BAR_ROW_PX + 60);
 
 /**
  * Filas de /dashboard/carrera-anio: { carrera, facultad, '2025': n, ... }.
@@ -140,7 +145,8 @@ function ChartCard({ title, subtitle, children, className = '', exportId }: {
         <h3 className="dash-chart-title">{title}</h3>
         {subtitle && <p className="dash-chart-subtitle">{subtitle}</p>}
       </div>
-      {children}
+      {/* Contenido completo (sin recortes) con scroll interno: la página no crece sin límite. */}
+      <div className="dash-scroll">{children}</div>
     </div>
   );
 }
@@ -202,17 +208,75 @@ function CarrerasChart({ data: source }: { data: CarreraAnioRow[] }) {
           </button>
         ))}
       </div>
-      <ResponsiveContainer width="100%" height={280}>
+      <ResponsiveContainer width="100%" height={barChartHeight(data.length, 280)}>
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 28, left: 96, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 12 }} />
-          <YAxis type="category" dataKey="carrera" tick={{ fontSize: 11 }} width={96} />
+          <YAxis type="category" dataKey="carrera" tick={{ fontSize: 11 }} width={96} interval={0} />
           <Tooltip content={<CustomTooltip />} />
           <Bar dataKey="alumnos" name="Alumnos" radius={[0, 6, 6, 0]}>
             {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+    </ChartCard>
+  );
+}
+
+// Estudiantes con 2+ proyectos y la cantidad exacta de cada uno
+const MultiProyectoTooltip = ({ active, payload }: any) => {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload as EstudianteMultiProyectoRow;
+  return (
+    <div className="dash-tooltip dash-tooltip-wide">
+      <p className="dash-tooltip-label">{row.nombre} · {row.carnet}</p>
+      <p style={{ margin: '2px 0' }}>{row.carrera}</p>
+      <p style={{ margin: '2px 0', color: C.orange }}>
+        Proyectos: <strong>{row.proyectos}</strong>
+        {row.activos > 0 ? ` (${row.activos} activo${row.activos === 1 ? '' : 's'})` : ''}
+      </p>
+      <ul className="dash-tooltip-list">
+        {row.titulos.map((t) => <li key={t}>{t}</li>)}
+      </ul>
+    </div>
+  );
+};
+
+function MultiProyectoChart({ data }: { data: EstudianteMultiProyectoRow[] }) {
+  // Etiqueta del eje: nombre + carnet (dos estudiantes pueden llamarse igual).
+  const rows = data.map((r) => ({ ...r, etiqueta: `${r.nombre} (${r.carnet})` }));
+  return (
+    <ChartCard
+      title="Estudiantes en Varios Proyectos"
+      subtitle={
+        data.length > 0
+          ? `${data.length} estudiante${data.length === 1 ? '' : 's'} con 2 o más proyectos (historial completo, activos y finalizados) y la cantidad exacta de proyectos de cada uno`
+          : 'Estudiantes con 2 o más proyectos (historial completo, activos y finalizados)'
+      }
+      exportId="chart-multiproyecto"
+    >
+      {rows.length === 0 ? (
+        <p className="empty-chart">Ningún estudiante participa en más de un proyecto.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={barChartHeight(rows.length)}>
+          <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} domain={[0, 'dataMax']} tick={{ fontSize: 12 }} />
+            <YAxis
+              type="category"
+              dataKey="etiqueta"
+              width={260}
+              interval={0}
+              tick={{ fontSize: 11 }}
+              tickFormatter={(value: string) => (value.length > 40 ? `${value.slice(0, 39)}…` : value)}
+            />
+            <Tooltip content={<MultiProyectoTooltip />} />
+            <Bar dataKey="proyectos" name="Proyectos" fill={C.orange} radius={[0, 6, 6, 0]}>
+              <LabelList dataKey="proyectos" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1c2433' }} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
     </ChartCard>
   );
 }
@@ -229,6 +293,7 @@ export default function DashboardPage() {
   const [apiInstitucionTabla, setApiInstitucionTabla] = useState<TablaInstitucionRow[]>([]);
   const [apiTendencia, setApiTendencia] = useState<TrendYearRow[]>([]);
   const [apiGenero, setApiGenero] = useState<GenderSummaryResponse | null>(null);
+  const [apiMultiProyecto, setApiMultiProyecto] = useState<EstudianteMultiProyectoRow[]>([]);
   const [loading, setLoading] = useState(true);
   // Secciones cuya carga falló (se muestran en un aviso, sin datos de ejemplo).
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
@@ -250,12 +315,11 @@ export default function DashboardPage() {
   const soloSinUbicacion =
     proyectosMunicipioData.length > 0 && proyectosMunicipioData.every((m) => m.municipio === SIN_UBICACION);
 
-  // Top N para el gráfico: más proyectos primero; a igualdad, más estudiantes.
-  const topInstituciones = useMemo(
+  // Todas las instituciones: más proyectos primero; a igualdad, más estudiantes.
+  const institucionesOrdenadas = useMemo(
     () =>
       [...metrics.metricasPorInstitucion]
-        .sort((a, b) => b.total - a.total || b.estudiantes - a.estudiantes || a.nombre.localeCompare(b.nombre))
-        .slice(0, TOP_INSTITUCIONES),
+        .sort((a, b) => b.total - a.total || b.estudiantes - a.estudiantes || a.nombre.localeCompare(b.nombre)),
     [metrics.metricasPorInstitucion]
   );
 
@@ -287,6 +351,7 @@ export default function DashboardPage() {
         intentar('Tabla por institución', getInstitutionDetailTable, setApiInstitucionTabla),
         intentar('Tendencia anual', getTrendByYear, setApiTendencia),
         intentar('Género', getGenderSummaryAPI, setApiGenero),
+        intentar('Estudiantes en varios proyectos', getStudentsInMultipleProjects, setApiMultiProyecto),
       ]);
 
       if (!active) return;
@@ -351,13 +416,13 @@ export default function DashboardPage() {
       {!loading && loadErrors.length > 0 ? (
         <Notice
           title={
-            loadErrors.length === 10
+            loadErrors.length === TOTAL_SECCIONES
               ? 'No se pudieron cargar los datos del dashboard'
-              : `No se pudieron cargar ${loadErrors.length} de 10 secciones del dashboard`
+              : `No se pudieron cargar ${loadErrors.length} de ${TOTAL_SECCIONES} secciones del dashboard`
           }
           onRetry={() => setReloadKey((k) => k + 1)}
         >
-          {loadErrors.length === 10 && errorUnico ? (
+          {loadErrors.length === TOTAL_SECCIONES && errorUnico ? (
             errorUnico
           ) : (
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
@@ -369,6 +434,7 @@ export default function DashboardPage() {
       ) : null}
 
       {/* KPIs — incluye el total de externos (Req 6) y el desglose de género (Req 2) */}
+      <div className="dash-scroll dash-kpi-scroll">
       <div className="dash-kpi-grid">
         <KpiCard icon={<UserCheck size={22} />} label="Estudiantes en Servicio Social Externo" value={metrics.totalEstudiantesExterno} sub={`Total activos ${currentYear}`} color={C.blue} />
         <KpiCard icon={<BookOpen size={22} />} label="Proyectos Totales" value={metrics.totalProyectos} sub="Todas las instituciones" color={C.green} />
@@ -376,6 +442,7 @@ export default function DashboardPage() {
         <KpiCard icon={<MapPin size={22} />} label="Municipios con Proyectos" value={metrics.totalMunicipios} sub="Cobertura nacional" color={C.teal} />
         <KpiCard icon={<Users size={22} />} label="Hombres en Servicio Social" value={metrics.totalHombres} sub={hayGenero ? `${pctH}% del total` : 'Sin datos de género'} color={C.blue} />
         <KpiCard icon={<GraduationCap size={22} />} label="Mujeres en Servicio Social" value={metrics.totalMujeres} sub={hayGenero ? `${pctM}% del total` : 'Sin datos de género'} color={C.pink} />
+      </div>
       </div>
 
       {/* Req 1 — Alumnos por carrera y año */}
@@ -436,13 +503,13 @@ export default function DashboardPage() {
 
       {/* Req 3 — Estudiantes por municipio */}
       <ChartCard title="Número de Estudiantes por Municipio" subtitle="Distribución de estudiantes en servicio social externo según municipio de ejecución del proyecto" exportId="chart-municipios-estudiantes">
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={estudiantesMunicipioData} margin={{ top: 4, right: 24, left: 0, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-            <XAxis dataKey="municipio" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={48} />
-            <YAxis tick={{ fontSize: 12 }} />
+        <ResponsiveContainer width="100%" height={barChartHeight(estudiantesMunicipioData.length)}>
+          <BarChart data={estudiantesMunicipioData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+            <YAxis type="category" dataKey="municipio" width={170} interval={0} tick={{ fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="estudiantes" name="Estudiantes" radius={[6, 6, 0, 0]}>
+            <Bar dataKey="estudiantes" name="Estudiantes" radius={[0, 6, 6, 0]}>
               {estudiantesMunicipioData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
             </Bar>
           </BarChart>
@@ -451,34 +518,34 @@ export default function DashboardPage() {
 
       {/* Req 4 — Proyectos por municipio */}
        <ChartCard title="Número de Proyectos por Municipio" subtitle="Total de proyectos registrados versus proyectos actualmente activos por municipio" exportId="chart-municipios-proyectos">
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={proyectosMunicipioData} margin={{ top: 4, right: 24, left: 0, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-            <XAxis dataKey="municipio" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={48} />
-            <YAxis tick={{ fontSize: 12 }} />
+        {/* Dos barras por municipio: más alto por fila. */}
+        <ResponsiveContainer width="100%" height={barChartHeight(proyectosMunicipioData.length * 1.5)}>
+          <BarChart data={proyectosMunicipioData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+            <YAxis type="category" dataKey="municipio" width={170} interval={0} tick={{ fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Bar dataKey="proyectos" name="Total Proyectos" fill={C.purple} radius={[6, 6, 0, 0]} />
-            <Bar dataKey="activos" name="Activos" fill={C.green} radius={[6, 6, 0, 0]} />
+            <Legend verticalAlign="top" />
+            <Bar dataKey="proyectos" name="Total Proyectos" fill={C.purple} radius={[0, 6, 6, 0]} />
+            <Bar dataKey="activos" name="Activos" fill={C.green} radius={[0, 6, 6, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
 
+      {/* Estudiantes que participan en varios proyectos */}
+      <MultiProyectoChart data={apiMultiProyecto} />
+
       {/* Req 5 — Métricas por institución (gráfico apilado) */}
       <ChartCard
         title="Métricas de Proyectos por Institución"
-        subtitle={
-          metrics.metricasPorInstitucion.length > TOP_INSTITUCIONES
-            ? `Top ${TOP_INSTITUCIONES} de ${metrics.metricasPorInstitucion.length} instituciones por total de proyectos (activos, en progreso y cerrados). La tabla inferior incluye todas.`
-            : 'Comparativa de proyectos activos, en progreso y cerrados por cada institución aliada'
-        }
+        subtitle={`Comparativa de proyectos activos, en progreso y cerrados de las ${metrics.metricasPorInstitucion.length} instituciones aliadas, de más a menos proyectos`}
         exportId="chart-instituciones"
       >
-        {topInstituciones.length === 0 ? (
+        {institucionesOrdenadas.length === 0 ? (
           <p className="empty-chart">No hay instituciones para mostrar.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={Math.max(220, topInstituciones.length * 30 + 60)}>
-            <BarChart data={topInstituciones} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+          <ResponsiveContainer width="100%" height={barChartHeight(institucionesOrdenadas.length)}>
+            <BarChart data={institucionesOrdenadas} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
               <YAxis
@@ -490,7 +557,7 @@ export default function DashboardPage() {
                 tickFormatter={(value: string) => (value.length > 34 ? `${value.slice(0, 33)}…` : value)}
               />
               <Tooltip content={<CustomTooltip />} />
-              <Legend />
+              <Legend verticalAlign="top" />
               <Bar dataKey="activos" name="Activos" fill={C.green} stackId="a" />
               <Bar dataKey="progreso" name="En progreso" fill={C.yellow} stackId="a" />
               <Bar dataKey="cerrados" name="Cerrados" fill={C.gray} stackId="a" radius={[0, 4, 4, 0]} />
@@ -505,7 +572,7 @@ export default function DashboardPage() {
           <h3 className="dash-chart-title">Tabla Detallada por Institución</h3>
           <p className="dash-chart-subtitle">Resumen completo incluyendo estudiantes en servicio social externo por institución aliada</p>
         </div>
-        <div className="dash-table-wrapper">
+        <div className="dash-table-wrapper dash-scroll">
           <table className="dash-table">
             <thead>
               <tr>

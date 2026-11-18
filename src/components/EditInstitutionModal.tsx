@@ -1,6 +1,8 @@
-import { Building2, ImagePlus, MapPinned, X } from 'lucide-react';
+import { Building2, ImagePlus, Mail, MapPinned, Phone, User, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import {
+  createInstitution,
+  describeApiError,
   toDataUrl,
   updateInstitution,
   type InstitutionDetailResponse,
@@ -32,21 +34,35 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
   );
 }
 
+/** '' → null: permite vaciar un dato opcional al editar. */
+const orNull = (value: string) => value.trim() || null;
+
+/**
+ * Alta y edición de instituciones. Sin `institution` el modal crea una nueva
+ * (POST /institutions); con ella, la edita (PUT /institutions/:id).
+ * La creación automática al registrar un proyecto (resolveOrCreate) sigue igual.
+ */
 export default function EditInstitutionModal({
   institution,
   onClose,
   onSaved,
 }: {
-  institution: InstitutionDetailResponse;
+  institution?: InstitutionDetailResponse | null;
   onClose: () => void;
-  onSaved?: (updated: InstitutionDetailResponse) => void;
+  onSaved?: (saved: InstitutionDetailResponse) => void;
 }) {
+  const isCreate = !institution;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [nombre, setNombre] = useState(institution.nombre ?? '');
-  const [tipo, setTipo] = useState(institution.tipo ?? '');
-  const [ubicacion, setUbicacion] = useState(institution.ubicacion ?? '');
-  const [descripcion, setDescripcion] = useState(institution.descripcion ?? '');
-  const [previewUrl, setPreviewUrl] = useState<string | null>(institution.image ?? null);
+  const [nombre, setNombre] = useState(institution?.nombre ?? '');
+  const [sigla, setSigla] = useState(institution?.sigla ?? '');
+  const [tipo, setTipo] = useState(institution?.tipo ?? '');
+  const [ubicacion, setUbicacion] = useState(institution?.ubicacion ?? '');
+  const [direccion, setDireccion] = useState(institution?.direccion ?? '');
+  const [contactoNombre, setContactoNombre] = useState(institution?.contactoNombre ?? '');
+  const [contactoEmail, setContactoEmail] = useState(institution?.contactoEmail ?? '');
+  const [telefono, setTelefono] = useState(institution?.telefono ?? '');
+  const [descripcion, setDescripcion] = useState(institution?.descripcion ?? '');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(institution?.image ?? null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [imageRemoved, setImageRemoved] = useState(false);
@@ -91,23 +107,45 @@ export default function EditInstitutionModal({
     setIsSaving(true);
     setError(null);
 
-    try {
-      const updated = await updateInstitution(institution.id, {
-        nombre: nombre.trim(),
-        tipo: tipo.trim() || null,
-        ubicacion: ubicacion.trim(),
-        descripcion: descripcion.trim(),
-        ...(imageDataUrl ? { image_url: imageDataUrl } : imageRemoved ? { image_url: null } : {}),
-      });
+    const contacto = {
+      contactoNombre: orNull(contactoNombre),
+      contactoEmail: orNull(contactoEmail),
+      telefono: orNull(telefono),
+    };
 
-      showToast('Institución actualizada correctamente', 'success');
-      onSaved?.(updated);
+    try {
+      const saved = isCreate
+        ? await createInstitution({
+            nombre: nombre.trim(),
+            sigla: sigla.trim(),
+            tipo: tipo.trim(),
+            ubicacion: ubicacion.trim(),
+            direccion: direccion.trim(),
+            descripcion: descripcion.trim(),
+            ...contacto,
+            ...(imageDataUrl ? { image_url: imageDataUrl } : {}),
+          })
+        : await updateInstitution(institution.id, {
+            nombre: nombre.trim(),
+            tipo: tipo.trim() || null,
+            ubicacion: ubicacion.trim(),
+            direccion: orNull(direccion),
+            descripcion: descripcion.trim(),
+            ...contacto,
+            ...(imageDataUrl ? { image_url: imageDataUrl } : imageRemoved ? { image_url: null } : {}),
+          });
+
+      showToast(isCreate ? 'Institución creada correctamente' : 'Institución actualizada correctamente', 'success');
+      onSaved?.(saved);
 
       setTimeout(() => {
         onClose();
       }, 1200);
     } catch (submitError) {
-      const msg = submitError instanceof Error ? submitError.message : 'No se pudo actualizar la institución';
+      const msg = describeApiError(
+        submitError,
+        isCreate ? 'No se pudo crear la institución' : 'No se pudo actualizar la institución',
+      );
       setError(msg);
       showToast(msg, 'error');
     } finally {
@@ -126,10 +164,10 @@ export default function EditInstitutionModal({
         }
       `}</style>
 
-      <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Editar institución">
+      <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={isCreate ? 'Nueva institución' : 'Editar institución'}>
         <form className="modal-card modal-card-wide" onSubmit={handleSubmit}>
           <div className="modal-header">
-            <h2>Editar institución</h2>
+            <h2>{isCreate ? 'Nueva institución' : 'Editar institución'}</h2>
             <button className="icon-btn small" type="button" onClick={onClose} aria-label="Cerrar modal">
               <X size={16} />
             </button>
@@ -145,6 +183,14 @@ export default function EditInstitutionModal({
                 onChange={(event) => setNombre(event.target.value)}
                 required
               />
+              {isCreate ? (
+                <Field
+                  label="Sigla (opcional)"
+                  placeholder="Ej. FUSAI"
+                  value={sigla}
+                  onChange={(event) => setSigla(event.target.value)}
+                />
+              ) : null}
               <Field
                 label="Tipo de institución"
                 placeholder="Ej. Universidad pública, privada, instituto"
@@ -159,6 +205,35 @@ export default function EditInstitutionModal({
                 value={ubicacion}
                 onChange={(event) => setUbicacion(event.target.value)}
                 required
+              />
+              <Field
+                label="Dirección (opcional)"
+                placeholder="Ej. Calle El Progreso #123, Colonia Escalón"
+                value={direccion}
+                onChange={(event) => setDireccion(event.target.value)}
+              />
+              <Field
+                label="Persona de contacto (opcional)"
+                placeholder="Nombre de la persona de contacto"
+                icon={<User size={18} />}
+                value={contactoNombre}
+                onChange={(event) => setContactoNombre(event.target.value)}
+              />
+              <Field
+                label="Correo de contacto (opcional)"
+                placeholder="contacto@institucion.org"
+                type="email"
+                icon={<Mail size={18} />}
+                value={contactoEmail}
+                onChange={(event) => setContactoEmail(event.target.value)}
+              />
+              <Field
+                label="Teléfono de contacto (opcional)"
+                placeholder="Ej. +503 2222-3333"
+                type="tel"
+                icon={<Phone size={18} />}
+                value={telefono}
+                onChange={(event) => setTelefono(event.target.value)}
               />
               <Field
                 label="Descripción de la institución"
@@ -204,7 +279,7 @@ export default function EditInstitutionModal({
           <div className="modal-footer">
             <button className="modal-btn-cancel" type="button" onClick={onClose}>Cancelar</button>
             <button className="modal-btn-save" type="submit" disabled={isSaving}>
-              {isSaving ? 'Guardando...' : 'Guardar cambios'}
+              {isSaving ? 'Guardando...' : isCreate ? 'Crear institución' : 'Guardar cambios'}
             </button>
           </div>
         </form>

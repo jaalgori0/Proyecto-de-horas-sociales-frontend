@@ -2,6 +2,7 @@ import { MapPin, Users, Clock, ChevronRight, UserPlus, BookOpen } from 'lucide-r
 import { Link } from 'react-router-dom';
 import type { Proyecto } from '../types';
 import { AvatarGroup } from './ui';
+import { PROJECT_CLASIFICACION_LABELS, type ProjectClasificacion } from '../services/api';
 
 // ─── Estado badge colors ──────────────────────────────────────────────────────
 const estadoConfig: Record<string, { label: string; color: string; bg: string; dot: string }> = {
@@ -180,6 +181,16 @@ export function ProjectListCard({
         >
           {project.titulo}
         </h2>
+
+        {project.clasificaciones?.length ? (
+          <div className="classification-tags" aria-label="Clasificación del proyecto">
+            {project.clasificaciones.map((code) => (
+              <span key={code} className="classification-tag">
+                {PROJECT_CLASIFICACION_LABELS[code as ProjectClasificacion] ?? code}
+              </span>
+            ))}
+          </div>
+        ) : null}
 
         {/* Description */}
         {project.descripcion ? (

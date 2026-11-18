@@ -27,6 +27,8 @@ import {
   deleteProject,  
   type ProjectDetailResponse,
   type ProjectListResponse,
+  PROJECT_CLASIFICACIONES,
+  PROJECT_CLASIFICACION_LABELS,
 } from '../services/api';
 import type { Proyecto } from '../types';
 
@@ -58,8 +60,11 @@ function mapDetailToProyecto(detail: any): Proyecto {
     cuposOcupados: detail.cuposOcupados ?? 0,
     cuposTotales: detail.cuposTotales ?? null,
     estudiantesAsignados: detail.estudiantesAsignados ?? (detail.estudiantes ? detail.estudiantes.length : undefined),
+    clasificaciones: detail.clasificaciones ?? [],
   } as Proyecto;
 }
+
+const CLASIFICACION_TODAS = 'Todas';
 
 // ─── ProyectosPage ────────────────────────────────────────────────────────────
 export function ProyectosPage() {
@@ -70,6 +75,7 @@ export function ProyectosPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('Todos');
   const [selectedLocation, setSelectedLocation] = useState('Todas');
+  const [selectedClasificacion, setSelectedClasificacion] = useState(CLASIFICACION_TODAS);
   const [sortBy] = useState<'recentes' | 'titulo' | 'ubicacion'>('recentes');
   const [projectsData, setProjectsData] = useState<Proyecto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +104,7 @@ export function ProyectosPage() {
     cuposOcupados: project.cuposOcupados,
     cuposTotales: project.cuposTotales,
     estudiantesAsignados: project.estudiantesAsignados ?? project.personas,
+    clasificaciones: project.clasificaciones ?? [],
   });
 
   async function fetchProjects() {
@@ -132,6 +139,7 @@ export function ProyectosPage() {
         cuposOcupados: detail.cuposOcupados ?? undefined,
         cuposTotales: detail.cuposTotales ?? null,
         estudiantesAsignados: detail.estudiantesAsignados ?? (detail.estudiantes ? detail.estudiantes.length : undefined),
+        clasificaciones: detail.clasificaciones ?? [],
       };
       setProjectsData((prev) => prev.map((p) => (String(p.id) === String(projectId) ? mapped : p)));
     } catch {
@@ -150,6 +158,10 @@ export function ProyectosPage() {
   }, []);
 
   const statusOptions = ['Todos', 'Activo', 'En progreso', 'Cerrado'];
+  const clasificacionOptions = [CLASIFICACION_TODAS, ...PROJECT_CLASIFICACIONES.map((c) => PROJECT_CLASIFICACION_LABELS[c])];
+  const selectedClasificacionCode = PROJECT_CLASIFICACIONES.find(
+    (c) => PROJECT_CLASIFICACION_LABELS[c] === selectedClasificacion,
+  );
 
   const locationOptions = [
     'Todas',
@@ -169,7 +181,10 @@ export function ProyectosPage() {
       const matchesLocation =
         selectedLocation === 'Todas' ||
         project.ubicacion.toLowerCase().includes(selectedLocation.toLowerCase());
-      return matchesQuery && matchesFaculty && matchesStatus && matchesLocation;
+      // Un proyecto puede tener varias clasificaciones: basta con que incluya la elegida.
+      const matchesClasificacion =
+        !selectedClasificacionCode || (project.clasificaciones ?? []).includes(selectedClasificacionCode);
+      return matchesQuery && matchesFaculty && matchesStatus && matchesLocation && matchesClasificacion;
     })
     .sort((a, b) => {
       if (sortBy === 'titulo') return a.titulo.localeCompare(b.titulo);
@@ -220,6 +235,12 @@ export function ProyectosPage() {
       <div className="content-split">
         <aside className="filter-rail">
           <FilterGroup title="Estado" options={statusOptions} selected={selectedStatus} onChange={setSelectedStatus} />
+          <FilterGroup
+            title="Clasificación"
+            options={clasificacionOptions}
+            selected={selectedClasificacion}
+            onChange={setSelectedClasificacion}
+          />
           <FilterGroup title="Ubicación" options={locationOptions} selected={selectedLocation} onChange={setSelectedLocation} />
         </aside>
 
