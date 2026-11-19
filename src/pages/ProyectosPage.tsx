@@ -27,6 +27,8 @@ import {
   deleteProject,  
   type ProjectDetailResponse,
   type ProjectListResponse,
+  PROJECT_CLASIFICACIONES,
+  PROJECT_CLASIFICACION_LABELS,
 } from '../services/api';
 import type { Proyecto } from '../types';
 
@@ -58,8 +60,11 @@ function mapDetailToProyecto(detail: any): Proyecto {
     cuposOcupados: detail.cuposOcupados ?? 0,
     cuposTotales: detail.cuposTotales ?? null,
     estudiantesAsignados: detail.estudiantesAsignados ?? (detail.estudiantes ? detail.estudiantes.length : undefined),
+    clasificaciones: detail.clasificaciones ?? [],
   } as Proyecto;
 }
+
+const CLASIFICACION_TODAS = 'Todas';
 
 // ─── ProyectosPage ────────────────────────────────────────────────────────────
 export function ProyectosPage() {
@@ -70,6 +75,7 @@ export function ProyectosPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('Todos');
   const [selectedLocation, setSelectedLocation] = useState('Todas');
+  const [selectedClasificacion, setSelectedClasificacion] = useState(CLASIFICACION_TODAS);
   const [sortBy] = useState<'recentes' | 'titulo' | 'ubicacion'>('recentes');
   const [projectsData, setProjectsData] = useState<Proyecto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +104,7 @@ export function ProyectosPage() {
     cuposOcupados: project.cuposOcupados,
     cuposTotales: project.cuposTotales,
     estudiantesAsignados: project.estudiantesAsignados ?? project.personas,
+    clasificaciones: project.clasificaciones ?? [],
   });
 
   async function fetchProjects() {
@@ -132,6 +139,7 @@ export function ProyectosPage() {
         cuposOcupados: detail.cuposOcupados ?? undefined,
         cuposTotales: detail.cuposTotales ?? null,
         estudiantesAsignados: detail.estudiantesAsignados ?? (detail.estudiantes ? detail.estudiantes.length : undefined),
+        clasificaciones: detail.clasificaciones ?? [],
       };
       setProjectsData((prev) => prev.map((p) => (String(p.id) === String(projectId) ? mapped : p)));
     } catch {
@@ -150,6 +158,10 @@ export function ProyectosPage() {
   }, []);
 
   const statusOptions = ['Todos', 'Activo', 'En progreso', 'Cerrado'];
+  const clasificacionOptions = [CLASIFICACION_TODAS, ...PROJECT_CLASIFICACIONES.map((c) => PROJECT_CLASIFICACION_LABELS[c])];
+  const selectedClasificacionCode = PROJECT_CLASIFICACIONES.find(
+    (c) => PROJECT_CLASIFICACION_LABELS[c] === selectedClasificacion,
+  );
 
   const locationOptions = [
     'Todas',
@@ -169,7 +181,10 @@ export function ProyectosPage() {
       const matchesLocation =
         selectedLocation === 'Todas' ||
         project.ubicacion.toLowerCase().includes(selectedLocation.toLowerCase());
-      return matchesQuery && matchesFaculty && matchesStatus && matchesLocation;
+      // Un proyecto puede tener varias clasificaciones: basta con que incluya la elegida.
+      const matchesClasificacion =
+        !selectedClasificacionCode || (project.clasificaciones ?? []).includes(selectedClasificacionCode);
+      return matchesQuery && matchesFaculty && matchesStatus && matchesLocation && matchesClasificacion;
     })
     .sort((a, b) => {
       if (sortBy === 'titulo') return a.titulo.localeCompare(b.titulo);
@@ -220,6 +235,12 @@ export function ProyectosPage() {
       <div className="content-split">
         <aside className="filter-rail">
           <FilterGroup title="Estado" options={statusOptions} selected={selectedStatus} onChange={setSelectedStatus} />
+          <FilterGroup
+            title="Clasificación"
+            options={clasificacionOptions}
+            selected={selectedClasificacion}
+            onChange={setSelectedClasificacion}
+          />
           <FilterGroup title="Ubicación" options={locationOptions} selected={selectedLocation} onChange={setSelectedLocation} />
         </aside>
 
@@ -360,6 +381,10 @@ export function ProyectoDetallePage() {
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Imagen opcional del proyecto: sin imagen (o si falla al cargar) se muestra el recuadro de texto.
+  const heroImage: string | null = resolveProjectImage(project);
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
+  useEffect(() => setHeroImageFailed(false), [heroImage]);
 
   function showToast(msg: string) {
     setSuccessToast(msg);
@@ -613,10 +638,13 @@ export function ProyectoDetallePage() {
           background: 'linear-gradient(135deg, #1a2f6e 0%, #2f68ec 60%, #21c08a 100%)',
         }}
       >
+        {/* Fondo decorativo fijo: la imagen del proyecto no se estira a todo el encabezado;
+            se muestra aparte con su proporción original. */}
         <img
-          src={resolveProjectImage(project) ?? '/images/ProjectsDirectoryDetailedView.jpeg'}
-          alt={project.nombre}
-          onError={(e) => { try { e.currentTarget.src = '/images/ProjectsDirectoryDetailedView.jpeg'; } catch { } }}
+          src="/images/ProjectsDirectoryDetailedView.jpeg"
+          alt=""
+          aria-hidden="true"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
           style={{
             position: 'absolute',
             inset: 0,
@@ -710,6 +738,8 @@ export function ProyectoDetallePage() {
               alignSelf: 'stretch',
               justifySelf: 'end',
               minHeight: 150,
+              display: 'grid',
+              placeItems: 'center',
               borderRadius: 18,
               overflow: 'hidden',
               border: '1px solid rgba(255,255,255,0.18)',
@@ -717,13 +747,15 @@ export function ProyectoDetallePage() {
               boxShadow: '0 16px 28px rgba(0,0,0,0.14)',
             }}
           >
-            <>
+            {heroImage && !heroImageFailed ? (
+              // Proporción original: se reduce si no cabe, nunca se agranda ni se recorta.
               <img
-                src={resolveProjectImage(project) ?? ''}
+                src={heroImage}
                 alt={project.nombre}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                style={{ width: '100%', height: '100%', minHeight: 150, objectFit: 'cover', display: 'block' }}
+                onError={() => setHeroImageFailed(true)}
+                style={{ display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: 220, objectFit: 'contain' }}
               />
+            ) : (
               <div style={{ width: '100%', height: '100%', minHeight: 150, display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,0.9)' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
@@ -732,7 +764,7 @@ export function ProyectoDetallePage() {
                   <div style={{ fontSize: '1rem', fontWeight: 800, marginTop: 6 }}>{project.institution}</div>
                 </div>
               </div>
-            </>
+            )}
           </div>
         </div>
       </div>

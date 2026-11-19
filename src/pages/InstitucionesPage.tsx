@@ -1,6 +1,6 @@
-import { MapPinned, Pencil, Search, SlidersHorizontal } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Mail, MapPinned, Pencil, Phone, Plus, Search, SlidersHorizontal, User } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import EditInstitutionModal from '../components/EditInstitutionModal';
 import InstitutionCard from '../components/InstitutionCard';
 import { BackLink, Notice } from '../components/ui';
@@ -23,6 +23,8 @@ export function InstitucionesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [showCreate, setShowCreate] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let active = true;
@@ -60,7 +62,10 @@ export function InstitucionesPage() {
     .filter((inst) => {
       const query = searchQuery.trim().toLowerCase();
       const matchesQuery =
-        !query || [inst.nombre, inst.ubicacion, inst.tipo ?? ''].some((v) => v.toLowerCase().includes(query));
+        !query ||
+        [inst.nombre, inst.ubicacion, inst.tipo ?? '', inst.contactoNombre ?? ''].some((v) =>
+          v.toLowerCase().includes(query),
+        );
       const selectedType = institutionTypes[activeFilter];
       const matchesCategory = selectedType === 'Todos' || (inst.tipo ?? '') === selectedType;
       return matchesQuery && matchesCategory;
@@ -97,9 +102,25 @@ export function InstitucionesPage() {
               <SlidersHorizontal size={16} />
               <span>{sortBy === 'nombre-asc' ? 'Ordenar A-Z' : 'Ordenar Z-A'}</span>
             </button>
+
+            <button className="primary-btn" type="button" onClick={() => setShowCreate(true)}>
+              <Plus size={16} />
+              <span>Nueva institución</span>
+            </button>
           </div>
         </div>
       </header>
+
+      {showCreate ? (
+        <EditInstitutionModal
+          onClose={() => setShowCreate(false)}
+          onSaved={(created) => {
+            setReloadKey((k) => k + 1);
+            // Tras el aviso de éxito, se abre el detalle de la nueva institución.
+            setTimeout(() => navigate(`/instituciones/${created.id}`), 1200);
+          }}
+        />
+      ) : null}
 
       {loading ? <p className="muted">Cargando instituciones...</p> : null}
       {!loading && error ? (
@@ -128,6 +149,9 @@ export function InstitucionesPage() {
             nombre: inst.nombre,
             sigla: inst.nombre,
             ubicacion: inst.ubicacion,
+            telefono: inst.telefono ?? undefined,
+            contactoNombre: inst.contactoNombre ?? undefined,
+            contactoEmail: inst.contactoEmail ?? undefined,
             tipo: inst.tipo ?? undefined,
             image: inst.image ?? undefined,
             descripcion: '',
@@ -150,14 +174,14 @@ export function InstitucionesPage() {
 
 // ─── InstitutionTabs ──────────────────────────────────────────────────────────
 function InstitutionTabs({ institution }: { institution: InstitutionDetailResponse }) {
-  const [tab, setTab] = useState<'general' | 'active' | 'progress' | 'closed'>('progress');
+  const [tab, setTab] = useState<'active' | 'progress' | 'closed'>('progress');
 
   return (
     <>
       <div className="tabs-row">
-        {(['general', 'active', 'progress', 'closed'] as const).map((t) => (
+        {(['active', 'progress', 'closed'] as const).map((t) => (
           <button key={t} className={`tab ${tab === t ? 'active' : ''}`} type="button" onClick={() => setTab(t)}>
-            {t === 'general' ? 'General' : t === 'active' ? 'Proyectos activos' : t === 'progress' ? 'Proyectos en progreso' : 'Proyectos cerrados'}
+            {t === 'active' ? 'Proyectos activos' : t === 'progress' ? 'Proyectos en progreso' : 'Proyectos cerrados'}
           </button>
         ))}
       </div>
@@ -229,13 +253,49 @@ function InstitutionTabs({ institution }: { institution: InstitutionDetailRespon
               : <p>No hay proyectos cerrados.</p>}
           </div>
         </section>
-
-        <section style={{ display: tab === 'general' ? 'block' : 'none' }}>
-          <div className="section-heading-row"><h2>General</h2></div>
-          <p>{institution.descripcion}</p>
-        </section>
       </div>
     </>
+  );
+}
+
+// ─── InstitutionContactInfo ───────────────────────────────────────────────────
+/** Ubicación y contacto visibles en el detalle; los datos vacíos se indican como "Sin registrar". */
+function InstitutionContactInfo({ institution }: { institution: InstitutionDetailResponse }) {
+  const ubicacion = [institution.ubicacion, institution.direccion].map((v) => v?.trim()).filter(Boolean).join(' · ');
+  const items: Array<{ icon: ReactNode; label: string; value: string | null | undefined; href?: string }> = [
+    { icon: <MapPinned size={16} />, label: 'Ubicación', value: ubicacion },
+    { icon: <User size={16} />, label: 'Contacto', value: institution.contactoNombre },
+    {
+      icon: <Phone size={16} />,
+      label: 'Teléfono',
+      value: institution.telefono,
+      href: institution.telefono ? `tel:${institution.telefono.replace(/[^\d+]/g, '')}` : undefined,
+    },
+    {
+      icon: <Mail size={16} />,
+      label: 'Correo',
+      value: institution.contactoEmail,
+      href: institution.contactoEmail ? `mailto:${institution.contactoEmail}` : undefined,
+    },
+  ];
+  return (
+    <dl className="institution-contact-grid">
+      {items.map((item) => (
+        <div key={item.label} className="institution-contact-item">
+          <dt>
+            {item.icon}
+            {item.label}
+          </dt>
+          <dd>
+            {item.value?.trim() ? (
+              item.href ? <a href={item.href}>{item.value}</a> : item.value
+            ) : (
+              <span className="muted">Sin registrar</span>
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -359,11 +419,13 @@ export function InstitucionDetallePage() {
 
           <div className="institution-meta">
             <span className="eyebrow-tag">Universidad destacada</span>
-            <span className="muted">{institution.ubicacion}</span>
             <h1>{institution.nombre}</h1>
-            <p>{institution.descripcion}</p>
           </div>
         </div>
+        <InstitutionContactInfo institution={institution} />
+        {institution.descripcion?.trim() ? (
+          <p className="institution-description">{institution.descripcion}</p>
+        ) : null}
         <div className="stats-row">
           <div className="stat-block">
             <strong>{institution.totalProyectosActivos}</strong>

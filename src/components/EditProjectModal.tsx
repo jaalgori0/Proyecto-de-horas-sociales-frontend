@@ -2,7 +2,8 @@ import { Building2, CalendarDays, ImagePlus, Layers3, MapPinned, Plus, X } from 
 import { useEffect, useRef, useState } from 'react';
 import { toDataUrl, updateProject, getFaculties, getCareers } from '../services/api';
 import { Field } from './ui';
-import type { ProjectDetailResponse, FacultyResponse, CareerResponse } from '../services/api';
+import type { ProjectDetailResponse, FacultyResponse, CareerResponse, ProjectClasificacion } from '../services/api';
+import ProjectClassificationsField from './ProjectClassificationsField';
 import { Trash2, Pencil } from 'lucide-react';
 import EditStudentModal, { type EnrolledStudent } from './EditStudentModal';
 import { removeEnrollment, updateStudentEnrollment } from '../services/api';
@@ -46,6 +47,8 @@ export default function EditProjectModal({
 
   const [projectPreviewUrl, setProjectPreviewUrl] = useState<string | null>(project.imagen);
   const [projectImageDataUrl, setProjectImageDataUrl] = useState<string | null>(null);
+  /** true si el usuario quitó la imagen actual del proyecto (se envía null para borrarla). */
+  const [projectImageRemoved, setProjectImageRemoved] = useState(false);
   const [institutionPreviewUrl, setInstitutionPreviewUrl] = useState<string | null>((project as any).institutionImageUrl ?? null);
   const [institutionImageDataUrl, setInstitutionImageDataUrl] = useState<string | null>(null);
 
@@ -74,6 +77,9 @@ export default function EditProjectModal({
   const [selectedCareerIds, setSelectedCareerIds] = useState<string[]>([]);
 
   const [title, setTitle] = useState(project.titulo ?? project.nombre ?? '');
+  const [clasificaciones, setClasificaciones] = useState<ProjectClasificacion[]>(
+    project.clasificaciones?.length ? project.clasificaciones : ['SS_EXTERNO'],
+  );
   const [location, setLocation] = useState(project.ubicacion ?? '');
   const [startDate, setStartDate] = useState(project.fechaInicio?.slice(0, 10) ?? '');
   const [endDate, setEndDate] = useState(project.fechaCierre?.slice(0, 10) ?? '');
@@ -135,6 +141,7 @@ export default function EditProjectModal({
     void toDataUrl(file).then((dataUrl) => {
       setProjectPreviewUrl(dataUrl);
       setProjectImageDataUrl(dataUrl);
+      setProjectImageRemoved(false);
     });
   }
 
@@ -151,6 +158,14 @@ export default function EditProjectModal({
     e.preventDefault();
     setIsSaving(true);
     setError(null);
+
+    if (clasificaciones.length === 0) {
+      const msg = 'Seleccione al menos una clasificación del proyecto';
+      setError(msg);
+      showToast(msg, 'error');
+      setIsSaving(false);
+      return;
+    }
 
     if (selectedCareerIds.length === 0) {
       const msg = 'Agrega al menos una carrera';
@@ -172,16 +187,19 @@ export default function EditProjectModal({
         institutionType,
         institutionLocation,
         institutionDescription,
-        institutionImage: institutionImageDataUrl,
+        institutionImage: institutionImageDataUrl ?? undefined,
         facultad: currentFacultyName,
         carreras: careerNames,
         titulo: title,
+        clasificaciones,
         ubicacion: location,
         descripcion: description,
         fechaInicio: startDate || undefined,
         fechaCierre: endDate || undefined,
         cupos: slots ? Number(slots) : undefined,
-        projectImage: projectImageDataUrl,
+        // Imagen opcional: nueva → se envía; quitada → null (se borra); sin tocar → no se envía
+        // (antes se mandaba null siempre y cada edición borraba la imagen existente).
+        projectImage: projectImageDataUrl ?? (projectImageRemoved ? null : undefined),
       });
 
       showToast('Proyecto actualizado correctamente', 'success');
@@ -367,6 +385,7 @@ export default function EditProjectModal({
               </div>
 
               <Field label="Nombre del proyecto" placeholder="Ej. Campaña de salud comunitaria" icon={<Plus size={18} />} value={title} onChange={(e) => setTitle(e.target.value)} required />
+              <ProjectClassificationsField value={clasificaciones} onChange={setClasificaciones} />
               <Field label="Ubicación" placeholder="Municipio / departamento" icon={<MapPinned size={18} />} value={location} onChange={(e) => setLocation(e.target.value)} required />
               <Field label="Fecha de inicio" placeholder="" type="date" icon={<CalendarDays size={18} />} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               <Field label="Fecha de cierre" placeholder="" type="date" icon={<CalendarDays size={18} />} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
@@ -405,7 +424,7 @@ export default function EditProjectModal({
                 <div className="modal-image-preview">
                   <img src={projectPreviewUrl} alt="Vista previa proyecto" />
                   <div className="modal-image-overlay">
-                    <button type="button" className="modal-image-remove" onClick={() => { setProjectPreviewUrl(null); setProjectImageDataUrl(null); }} aria-label="Quitar imagen">
+                    <button type="button" className="modal-image-remove" onClick={() => { setProjectPreviewUrl(null); setProjectImageDataUrl(null); setProjectImageRemoved(true); if (projectFileInputRef.current) projectFileInputRef.current.value = ''; }} aria-label="Quitar imagen">
                       <X size={14} /> Quitar imagen
                     </button>
                   </div>

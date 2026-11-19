@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line,
+  PieChart, Pie, Cell, Legend, LineChart, Line, LabelList,
 } from 'recharts';
 import {
   Download, FileSpreadsheet, Users, BookOpen,
-  Building2, MapPin, GraduationCap, ChevronDown, UserCheck,
+  Building2, MapPin, GraduationCap, ChevronDown, UserCheck, Award,
 } from 'lucide-react';
 import { exportToExcelFormatted } from '../utils/exportExcel';
 import { Notice } from '../components/ui';
@@ -19,8 +19,12 @@ import {
   getStudentsByMunicipio,
   getProjectsByMunicipio,
   getInstitutionDetailTable,
+  getStudentsInMultipleProjects,
   getTrendByYear,
   getGenderSummaryAPI,
+  getFaculties,
+  getCompletaron600,
+  type Completaron600Response,
   type DashboardSummaryResponse,
   type GenderSummaryResponse,
   type InstitutionListResponse,
@@ -30,6 +34,9 @@ import {
   type EstudiantesMunicipioRow,
   type ProyectosMunicipioRow,
   type TablaInstitucionRow,
+  type EstudianteMultiProyectoRow,
+  type CarreraAnioMetrica,
+  type FacultyResponse,
   type TrendYearRow,
 } from '../services/api';
 
@@ -48,8 +55,11 @@ const C = {
 const PALETTE = [C.blue, C.green, C.pink, C.purple, C.yellow, C.teal, C.orange, C.red];
 
 const SIN_UBICACION = 'Sin ubicación';
-/** Instituciones que se grafican en "Métricas por institución" (la tabla muestra todas). */
-const TOP_INSTITUCIONES = 15;
+/** Secciones que carga el dashboard (una llamada a la API cada una). */
+const TOTAL_SECCIONES = 12;
+/** Alto por fila de los gráficos de barras horizontales (crecen con los datos; el scroll lo absorbe la tarjeta). */
+const BAR_ROW_PX = 30;
+const barChartHeight = (rows: number, min = 220) => Math.max(min, rows * BAR_ROW_PX + 60);
 
 /**
  * Filas de /dashboard/carrera-anio: { carrera, facultad, '2025': n, ... }.
@@ -131,16 +141,20 @@ function KpiCard({ icon, label, value, sub, color }: {
   );
 }
 
-function ChartCard({ title, subtitle, children, className = '', exportId }: {
+function ChartCard({ title, subtitle, children, className = '', exportId, headerExtra }: {
   title: string; subtitle?: string; children: React.ReactNode; className?: string; exportId?: string;
+  /** Controles/resumen del encabezado: quedan fijos, fuera del scroll interno. */
+  headerExtra?: React.ReactNode;
 }) {
   return (
     <div className={`dash-chart-card ${className}`} {...(exportId ? { 'data-export-id': exportId } : {})}>
       <div className="dash-chart-header">
         <h3 className="dash-chart-title">{title}</h3>
         {subtitle && <p className="dash-chart-subtitle">{subtitle}</p>}
+        {headerExtra}
       </div>
-      {children}
+      {/* Contenido completo (sin recortes) con scroll interno: la página no crece sin límite. */}
+      <div className="dash-scroll">{children}</div>
     </div>
   );
 }
@@ -160,7 +174,29 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 // Req 1 — Gráfico con selector de año
-function CarrerasChart({ data: source }: { data: CarreraAnioRow[] }) {
+const CARRERA_METRICAS: Record<CarreraAnioMetrica, { tab: string; serie: string; total: string; vacio: string }> = {
+  estudiantes: {
+    tab: 'Estudiantes únicos',
+    serie: 'Estudiantes',
+    total: 'estudiantes únicos',
+    vacio: 'No hay estudiantes con participaciones registradas para mostrar.',
+  },
+  participaciones: {
+    tab: 'Participaciones totales',
+    serie: 'Participaciones',
+    total: 'participaciones (incluye a un mismo estudiante en varios proyectos)',
+    vacio: 'No hay participaciones registradas para mostrar.',
+  },
+};
+
+function CarrerasChart({ estudiantes, participaciones }: {
+  estudiantes: CarreraAnioRow[];
+  participaciones: CarreraAnioRow[];
+}) {
+  const [metrica, setMetrica] = useState<CarreraAnioMetrica>('estudiantes');
+  const source = metrica === 'estudiantes' ? estudiantes : participaciones;
+  const labels = CARRERA_METRICAS[metrica];
+
   // Calcula dinámicamente qué años existen en los datos (solo claves de 4 dígitos)
   const availableYears = useMemo(() => {
     const yearsSet = new Set<string>();
@@ -185,16 +221,39 @@ function CarrerasChart({ data: source }: { data: CarreraAnioRow[] }) {
   const data = source
     .map((d) => ({ carrera: d.carrera, alumnos: Number(d[anio] ?? 0) }))
     .sort((a, b) => b.alumnos - a.alumnos);
+  // Cada estudiante tiene una sola carrera: la suma de la columna es el total exacto del año.
+  const totalAnio = data.reduce((sum, d) => sum + d.alumnos, 0);
 
   return (
     <ChartCard
       title="Alumnos en Horas Sociales por Carrera y Año"
       subtitle="Número de estudiantes realizando horas sociales, filtrando por año académico"
       exportId="chart-carreras"
+      headerExtra={
+        <div className="dash-metric-bar">
+          <div className="dash-metric-toggle" role="tablist" aria-label="Tipo de conteo">
+            {(Object.keys(CARRERA_METRICAS) as CarreraAnioMetrica[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={metrica === m}
+                className={`dash-year-btn ${metrica === m ? 'active' : ''}`}
+                onClick={() => setMetrica(m)}
+              >
+                {CARRERA_METRICAS[m].tab}
+              </button>
+            ))}
+          </div>
+          {anio ? (
+            <p className="dash-metric-total">
+              Total {anio}: <strong>{totalAnio.toLocaleString('es-SV')}</strong> {labels.total}
+            </p>
+          ) : null}
+        </div>
+      }
     >
-      {source.length === 0 ? (
-        <p className="empty-chart">No hay estudiantes con participaciones registradas para mostrar.</p>
-      ) : null}
+      {source.length === 0 ? <p className="empty-chart">{labels.vacio}</p> : null}
       <div className="dash-year-selector">
         {availableYears.map((y) => (
           <button key={y} type="button" className={`dash-year-btn ${anio === y ? 'active' : ''}`} onClick={() => setAnio(y)}>
@@ -202,17 +261,337 @@ function CarrerasChart({ data: source }: { data: CarreraAnioRow[] }) {
           </button>
         ))}
       </div>
-      <ResponsiveContainer width="100%" height={280}>
+      <ResponsiveContainer width="100%" height={barChartHeight(data.length, 280)}>
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 28, left: 96, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 12 }} />
-          <YAxis type="category" dataKey="carrera" tick={{ fontSize: 11 }} width={96} />
+          <YAxis type="category" dataKey="carrera" tick={{ fontSize: 11 }} width={96} interval={0} />
           <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="alumnos" name="Alumnos" radius={[0, 6, 6, 0]}>
+          <Bar dataKey="alumnos" name={labels.serie} radius={[0, 6, 6, 0]}>
             {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+    </ChartCard>
+  );
+}
+
+// Req 2 — Género, con filtro por facultad
+const TODAS_LAS_FACULTADES = '';
+
+function GeneroChart({ general }: { general: { hombres: number; mujeres: number; sinDato: number } }) {
+  const [faculties, setFaculties] = useState<FacultyResponse[]>([]);
+  const [facultyId, setFacultyId] = useState<string>(TODAS_LAS_FACULTADES);
+  const [filtrado, setFiltrado] = useState<{ hombres: number; mujeres: number; sinDato: number } | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    getFaculties()
+      .then((list) => setFaculties([...list].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))))
+      .catch(() => setFaculties([]));
+  }, []);
+
+  // "Todas" usa el total ya cargado por el dashboard; una facultad se consulta al backend.
+  useEffect(() => {
+    if (facultyId === TODAS_LAS_FACULTADES) {
+      setFiltrado(null);
+      setError('');
+      return;
+    }
+    let active = true;
+    setCargando(true);
+    setError('');
+    getGenderSummaryAPI(facultyId)
+      .then((g) => {
+        if (active) setFiltrado({ hombres: g.hombres ?? 0, mujeres: g.mujeres ?? 0, sinDato: Number(g.sinDato ?? 0) });
+      })
+      .catch((err) => {
+        if (active) setError(describeApiError(err, 'No se pudo cargar el género de la facultad.'));
+      })
+      .finally(() => {
+        if (active) setCargando(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [facultyId]);
+
+  const datos = filtrado ?? general;
+  const total = datos.hombres + datos.mujeres;
+  const hayGenero = total > 0;
+  const pctH = hayGenero ? Math.round((datos.hombres / total) * 100) : 0;
+  const pctM = hayGenero ? 100 - pctH : 0;
+  const pieData = [
+    { name: 'Hombres', value: datos.hombres },
+    { name: 'Mujeres', value: datos.mujeres },
+  ];
+  const facultadNombre = faculties.find((f) => String(f.id) === facultyId)?.nombre;
+
+  return (
+    <ChartCard
+      title="Hombres y Mujeres en Horas Sociales"
+      subtitle={
+        facultadNombre
+          ? `Distribución por género de los estudiantes de ${facultadNombre}`
+          : 'Distribución por género de los estudiantes en servicio social externo'
+      }
+      exportId="chart-genero"
+      headerExtra={
+        <div className="dash-metric-bar">
+          <label className="dash-select-label">
+            <span>Facultad</span>
+            <select
+              className="dash-select"
+              value={facultyId}
+              onChange={(e) => setFacultyId(e.target.value)}
+              disabled={faculties.length === 0}
+            >
+              <option value={TODAS_LAS_FACULTADES}>Todas las facultades</option>
+              {faculties.map((f) => (
+                <option key={f.id} value={String(f.id)}>{f.nombre}</option>
+              ))}
+            </select>
+          </label>
+          {!error ? (
+            <p className="dash-metric-total">
+              {cargando ? 'Cargando…' : <>Total: <strong>{total.toLocaleString('es-SV')}</strong> estudiantes</>}
+            </p>
+          ) : null}
+        </div>
+      }
+    >
+      {error ? (
+        <p className="empty-chart">{error}</p>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="50%" innerRadius={65} outerRadius={100} paddingAngle={4} dataKey="value">
+                <Cell fill={C.blue} />
+                <Cell fill={C.pink} />
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+          {hayGenero ? (
+            <div className="dash-gender-bar">
+              <div className="dash-gender-segment men" style={{ width: `${pctH}%` }}><span>{pctH}% H</span></div>
+              <div className="dash-gender-segment women" style={{ width: `${pctM}%` }}><span>{pctM}% M</span></div>
+            </div>
+          ) : (
+            <p className="empty-chart">
+              {facultadNombre ? `No hay datos de género registrados en ${facultadNombre}` : 'No hay datos de género registrados'}
+              {datos.sinDato > 0 ? ` (${datos.sinDato} estudiantes sin este dato)` : ''}.
+            </p>
+          )}
+          {hayGenero && datos.sinDato > 0 ? (
+            <p className="muted" style={{ fontSize: '0.85rem', margin: '8px 0 0' }}>
+              {datos.sinDato} estudiantes no tienen género registrado y no se incluyen.
+            </p>
+          ) : null}
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+// Participantes del año que completaron las 600 horas (historial acumulado al cierre del año)
+function Completaron600Card() {
+  const [faculties, setFaculties] = useState<FacultyResponse[]>([]);
+  const [facultyId, setFacultyId] = useState<string>(TODAS_LAS_FACULTADES);
+  /** '' = el backend elige el año más reciente con participantes. */
+  const [anio, setAnio] = useState<string>('');
+  const [datos, setDatos] = useState<Completaron600Response | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+  const [reintento, setReintento] = useState(0);
+
+  useEffect(() => {
+    getFaculties()
+      .then((list) => setFaculties([...list].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))))
+      .catch(() => setFaculties([]));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setCargando(true);
+    setError('');
+    getCompletaron600(anio || undefined, facultyId || undefined)
+      .then((r) => {
+        if (!active) return;
+        // Si el año elegido no tiene participantes en la facultad nueva, se pasa al más reciente.
+        if (anio && r.anios.length > 0 && !r.anios.includes(Number(anio))) {
+          setAnio(String(r.anios[r.anios.length - 1]));
+          return;
+        }
+        setDatos(r);
+      })
+      .catch((err) => {
+        if (active) setError(describeApiError(err, 'No se pudo cargar quiénes completaron las 600 horas.'));
+      })
+      .finally(() => {
+        if (active) setCargando(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [anio, facultyId, reintento]);
+
+  const anioActual = datos?.anio != null ? String(datos.anio) : '';
+  const requisito = datos?.requisito ?? 600;
+  const facultadNombre = faculties.find((f) => String(f.id) === facultyId)?.nombre;
+
+  return (
+    <ChartCard
+      title={`Estudiantes que Completaron las ${requisito} Horas`}
+      subtitle={`De las personas que realizaron horas sociales en el año seleccionado${facultadNombre ? ` (${facultadNombre})` : ''}, cuántas completaron el requisito según su historial acumulado hasta el cierre de ese año`}
+      exportId="chart-completaron-600"
+      headerExtra={
+        <div className="dash-metric-bar">
+          <label className="dash-select-label">
+            <span>Facultad</span>
+            <select
+              className="dash-select"
+              value={facultyId}
+              onChange={(e) => setFacultyId(e.target.value)}
+              disabled={faculties.length === 0}
+            >
+              <option value={TODAS_LAS_FACULTADES}>Todas las facultades</option>
+              {faculties.map((f) => (
+                <option key={f.id} value={String(f.id)}>{f.nombre}</option>
+              ))}
+            </select>
+          </label>
+          {datos && !error && anioActual ? (
+            <p className="dash-metric-total">
+              {anioActual}: <strong>{datos.completaron.toLocaleString('es-SV')}</strong> de{' '}
+              <strong>{datos.participantes.toLocaleString('es-SV')}</strong> participantes ({datos.porcentaje}%)
+            </p>
+          ) : null}
+        </div>
+      }
+    >
+      {error ? (
+        <div className="empty-chart">
+          {error}{' '}
+          <button type="button" className="dash-year-btn" onClick={() => setReintento((n) => n + 1)}>Reintentar</button>
+        </div>
+      ) : !datos ? (
+        <p className="empty-chart">{cargando ? 'Cargando…' : 'Sin datos.'}</p>
+      ) : datos.anios.length === 0 ? (
+        <p className="empty-chart">No hay participaciones registradas para mostrar.</p>
+      ) : (
+        <>
+          <div className="dash-year-selector">
+            {datos.anios.map((y) => (
+              <button
+                key={y}
+                type="button"
+                className={`dash-year-btn ${anioActual === String(y) ? 'active' : ''}`}
+                onClick={() => setAnio(String(y))}
+                disabled={cargando}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+          <div className="dash-kpi-grid" style={{ marginBottom: 16 }}>
+            <KpiCard icon={<Users size={22} />} label={`Participantes ${anioActual}`} value={datos.participantes} sub="Realizaron horas sociales ese año" color={C.blue} />
+            <KpiCard icon={<Award size={22} />} label={`Completaron ${requisito} h`} value={datos.completaron} sub={`${datos.porcentaje}% de los participantes`} color={C.green} />
+            <KpiCard icon={<GraduationCap size={22} />} label="Aún sin completar" value={datos.pendientes} sub={`Menos de ${requisito} h al cierre de ${anioActual}`} color={C.orange} />
+          </div>
+          {datos.estudiantes.length === 0 ? (
+            <p className="empty-chart">
+              Ningún participante de {anioActual} había completado las {requisito} horas al cierre de ese año.
+            </p>
+          ) : (
+            <div className="dash-table-wrapper">
+              <table className="dash-table">
+                <thead>
+                  <tr>
+                    <th>Estudiante</th>
+                    <th>Carnet</th>
+                    <th>Carrera</th>
+                    <th>Horas en {anioActual}</th>
+                    <th>Horas acumuladas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {datos.estudiantes.map((e) => (
+                    <tr key={e.studentId}>
+                      <td><strong>{e.nombre}</strong></td>
+                      <td>{e.carnet}</td>
+                      <td>{e.carrera}</td>
+                      <td className="dash-num">{e.horasAnio.toLocaleString('es-SV')}</td>
+                      <td className="dash-num dash-num-green"><strong>{e.horasAcumuladas.toLocaleString('es-SV')}</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+// Estudiantes con 2+ proyectos y la cantidad exacta de cada uno
+const MultiProyectoTooltip = ({ active, payload }: any) => {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload as EstudianteMultiProyectoRow;
+  return (
+    <div className="dash-tooltip dash-tooltip-wide">
+      <p className="dash-tooltip-label">{row.nombre} · {row.carnet}</p>
+      <p style={{ margin: '2px 0' }}>{row.carrera}</p>
+      <p style={{ margin: '2px 0', color: C.orange }}>
+        Proyectos: <strong>{row.proyectos}</strong>
+        {row.activos > 0 ? ` (${row.activos} activo${row.activos === 1 ? '' : 's'})` : ''}
+      </p>
+      <ul className="dash-tooltip-list">
+        {row.titulos.map((t) => <li key={t}>{t}</li>)}
+      </ul>
+    </div>
+  );
+};
+
+function MultiProyectoChart({ data }: { data: EstudianteMultiProyectoRow[] }) {
+  // Etiqueta del eje: nombre + carnet (dos estudiantes pueden llamarse igual).
+  const rows = data.map((r) => ({ ...r, etiqueta: `${r.nombre} (${r.carnet})` }));
+  return (
+    <ChartCard
+      title="Estudiantes en Varios Proyectos"
+      subtitle={
+        data.length > 0
+          ? `${data.length} estudiante${data.length === 1 ? '' : 's'} con 2 o más proyectos (historial completo, activos y finalizados) y la cantidad exacta de proyectos de cada uno`
+          : 'Estudiantes con 2 o más proyectos (historial completo, activos y finalizados)'
+      }
+      exportId="chart-multiproyecto"
+    >
+      {rows.length === 0 ? (
+        <p className="empty-chart">Ningún estudiante participa en más de un proyecto.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={barChartHeight(rows.length)}>
+          <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} domain={[0, 'dataMax']} tick={{ fontSize: 12 }} />
+            <YAxis
+              type="category"
+              dataKey="etiqueta"
+              width={260}
+              interval={0}
+              tick={{ fontSize: 11 }}
+              tickFormatter={(value: string) => (value.length > 40 ? `${value.slice(0, 39)}…` : value)}
+            />
+            <Tooltip content={<MultiProyectoTooltip />} />
+            <Bar dataKey="proyectos" name="Proyectos" fill={C.orange} radius={[0, 6, 6, 0]}>
+              <LabelList dataKey="proyectos" position="right" style={{ fontSize: 12, fontWeight: 700, fill: '#1c2433' }} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
     </ChartCard>
   );
 }
@@ -224,11 +603,13 @@ export default function DashboardPage() {
   const [apiMarkers, setApiMarkers] = useState<MapMarkerResponse[]>([]);
   const [apiSummary, setApiSummary] = useState<DashboardSummaryResponse | null>(null);
   const [apiCarreraAnio, setApiCarreraAnio] = useState<CarreraAnioRow[]>([]);
+  const [apiCarreraAnioParticipaciones, setApiCarreraAnioParticipaciones] = useState<CarreraAnioRow[]>([]);
   const [apiEstudiantesMunicipio, setApiEstudiantesMunicipio] = useState<EstudiantesMunicipioRow[]>([]);
   const [apiProyectosMunicipio, setApiProyectosMunicipio] = useState<ProyectosMunicipioRow[]>([]);
   const [apiInstitucionTabla, setApiInstitucionTabla] = useState<TablaInstitucionRow[]>([]);
   const [apiTendencia, setApiTendencia] = useState<TrendYearRow[]>([]);
   const [apiGenero, setApiGenero] = useState<GenderSummaryResponse | null>(null);
+  const [apiMultiProyecto, setApiMultiProyecto] = useState<EstudianteMultiProyectoRow[]>([]);
   const [loading, setLoading] = useState(true);
   // Secciones cuya carga falló (se muestran en un aviso, sin datos de ejemplo).
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
@@ -250,12 +631,11 @@ export default function DashboardPage() {
   const soloSinUbicacion =
     proyectosMunicipioData.length > 0 && proyectosMunicipioData.every((m) => m.municipio === SIN_UBICACION);
 
-  // Top N para el gráfico: más proyectos primero; a igualdad, más estudiantes.
-  const topInstituciones = useMemo(
+  // Todas las instituciones: más proyectos primero; a igualdad, más estudiantes.
+  const institucionesOrdenadas = useMemo(
     () =>
       [...metrics.metricasPorInstitucion]
-        .sort((a, b) => b.total - a.total || b.estudiantes - a.estudiantes || a.nombre.localeCompare(b.nombre))
-        .slice(0, TOP_INSTITUCIONES),
+        .sort((a, b) => b.total - a.total || b.estudiantes - a.estudiantes || a.nombre.localeCompare(b.nombre)),
     [metrics.metricasPorInstitucion]
   );
 
@@ -281,12 +661,15 @@ export default function DashboardPage() {
         intentar('Instituciones', getInstitutions, setApiInstitutions),
         intentar('Marcadores del mapa', getMapMarkers, setApiMarkers),
         intentar('Resumen', getDashboardSummary, setApiSummary),
-        intentar('Alumnos por carrera y año', getStudentsByCarreraAndYear, (rows) => setApiCarreraAnio(sanitizeCarreraAnio(rows))),
+        intentar('Alumnos por carrera y año', () => getStudentsByCarreraAndYear('estudiantes'), (rows) => setApiCarreraAnio(sanitizeCarreraAnio(rows))),
+        intentar('Participaciones por carrera y año', () => getStudentsByCarreraAndYear('participaciones'), (rows) =>
+          setApiCarreraAnioParticipaciones(sanitizeCarreraAnio(rows))),
         intentar('Estudiantes por municipio', getStudentsByMunicipio, setApiEstudiantesMunicipio),
         intentar('Proyectos por municipio', getProjectsByMunicipio, setApiProyectosMunicipio),
         intentar('Tabla por institución', getInstitutionDetailTable, setApiInstitucionTabla),
         intentar('Tendencia anual', getTrendByYear, setApiTendencia),
-        intentar('Género', getGenderSummaryAPI, setApiGenero),
+        intentar('Género', () => getGenderSummaryAPI(), setApiGenero),
+        intentar('Estudiantes en varios proyectos', getStudentsInMultipleProjects, setApiMultiProyecto),
       ]);
 
       if (!active) return;
@@ -351,13 +734,13 @@ export default function DashboardPage() {
       {!loading && loadErrors.length > 0 ? (
         <Notice
           title={
-            loadErrors.length === 10
+            loadErrors.length === TOTAL_SECCIONES
               ? 'No se pudieron cargar los datos del dashboard'
-              : `No se pudieron cargar ${loadErrors.length} de 10 secciones del dashboard`
+              : `No se pudieron cargar ${loadErrors.length} de ${TOTAL_SECCIONES} secciones del dashboard`
           }
           onRetry={() => setReloadKey((k) => k + 1)}
         >
-          {loadErrors.length === 10 && errorUnico ? (
+          {loadErrors.length === TOTAL_SECCIONES && errorUnico ? (
             errorUnico
           ) : (
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
@@ -369,6 +752,7 @@ export default function DashboardPage() {
       ) : null}
 
       {/* KPIs — incluye el total de externos (Req 6) y el desglose de género (Req 2) */}
+      <div className="dash-scroll dash-kpi-scroll">
       <div className="dash-kpi-grid">
         <KpiCard icon={<UserCheck size={22} />} label="Estudiantes en Servicio Social Externo" value={metrics.totalEstudiantesExterno} sub={`Total activos ${currentYear}`} color={C.blue} />
         <KpiCard icon={<BookOpen size={22} />} label="Proyectos Totales" value={metrics.totalProyectos} sub="Todas las instituciones" color={C.green} />
@@ -377,40 +761,16 @@ export default function DashboardPage() {
         <KpiCard icon={<Users size={22} />} label="Hombres en Servicio Social" value={metrics.totalHombres} sub={hayGenero ? `${pctH}% del total` : 'Sin datos de género'} color={C.blue} />
         <KpiCard icon={<GraduationCap size={22} />} label="Mujeres en Servicio Social" value={metrics.totalMujeres} sub={hayGenero ? `${pctM}% del total` : 'Sin datos de género'} color={C.pink} />
       </div>
+      </div>
 
       {/* Req 1 — Alumnos por carrera y año */}
-      <CarrerasChart data={apiCarreraAnio} />
+      <CarrerasChart estudiantes={apiCarreraAnio} participaciones={apiCarreraAnioParticipaciones} />
 
       {/* Req 2 — Género + Tendencia anual */}
       <div className="dash-grid-2">
-         <ChartCard title="Hombres y Mujeres en Horas Sociales" subtitle="Distribución por género de los estudiantes en servicio social externo" exportId="chart-genero">
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie data={metrics.generoData} cx="50%" cy="50%" innerRadius={65} outerRadius={100} paddingAngle={4} dataKey="value">
-                <Cell fill={C.blue} />
-                <Cell fill={C.pink} />
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-          {hayGenero ? (
-            <div className="dash-gender-bar">
-              <div className="dash-gender-segment men" style={{ width: `${pctH}%` }}><span>{pctH}% H</span></div>
-              <div className="dash-gender-segment women" style={{ width: `${pctM}%` }}><span>{pctM}% M</span></div>
-            </div>
-          ) : (
-            <p className="empty-chart">
-              No hay datos de género registrados
-              {metrics.totalSinGenero > 0 ? ` (${metrics.totalSinGenero} estudiantes sin este dato)` : ''}.
-            </p>
-          )}
-          {hayGenero && metrics.totalSinGenero > 0 ? (
-            <p className="muted" style={{ fontSize: '0.85rem', margin: '8px 0 0' }}>
-              {metrics.totalSinGenero} estudiantes no tienen género registrado y no se incluyen.
-            </p>
-          ) : null}
-        </ChartCard>
+        <GeneroChart
+          general={{ hombres: metrics.totalHombres, mujeres: metrics.totalMujeres, sinDato: metrics.totalSinGenero }}
+        />
 
         <ChartCard title="Tendencia Anual de Estudiantes Externos" subtitle="Evolución histórica de la participación en servicio social por año" exportId="chart-tendencia">
           <ResponsiveContainer width="100%" height={260}>
@@ -436,13 +796,13 @@ export default function DashboardPage() {
 
       {/* Req 3 — Estudiantes por municipio */}
       <ChartCard title="Número de Estudiantes por Municipio" subtitle="Distribución de estudiantes en servicio social externo según municipio de ejecución del proyecto" exportId="chart-municipios-estudiantes">
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={estudiantesMunicipioData} margin={{ top: 4, right: 24, left: 0, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-            <XAxis dataKey="municipio" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={48} />
-            <YAxis tick={{ fontSize: 12 }} />
+        <ResponsiveContainer width="100%" height={barChartHeight(estudiantesMunicipioData.length)}>
+          <BarChart data={estudiantesMunicipioData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+            <YAxis type="category" dataKey="municipio" width={170} interval={0} tick={{ fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="estudiantes" name="Estudiantes" radius={[6, 6, 0, 0]}>
+            <Bar dataKey="estudiantes" name="Estudiantes" radius={[0, 6, 6, 0]}>
               {estudiantesMunicipioData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
             </Bar>
           </BarChart>
@@ -451,34 +811,37 @@ export default function DashboardPage() {
 
       {/* Req 4 — Proyectos por municipio */}
        <ChartCard title="Número de Proyectos por Municipio" subtitle="Total de proyectos registrados versus proyectos actualmente activos por municipio" exportId="chart-municipios-proyectos">
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={proyectosMunicipioData} margin={{ top: 4, right: 24, left: 0, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-            <XAxis dataKey="municipio" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" height={48} />
-            <YAxis tick={{ fontSize: 12 }} />
+        {/* Dos barras por municipio: más alto por fila. */}
+        <ResponsiveContainer width="100%" height={barChartHeight(proyectosMunicipioData.length * 1.5)}>
+          <BarChart data={proyectosMunicipioData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+            <YAxis type="category" dataKey="municipio" width={170} interval={0} tick={{ fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Bar dataKey="proyectos" name="Total Proyectos" fill={C.purple} radius={[6, 6, 0, 0]} />
-            <Bar dataKey="activos" name="Activos" fill={C.green} radius={[6, 6, 0, 0]} />
+            <Legend verticalAlign="top" />
+            <Bar dataKey="proyectos" name="Total Proyectos" fill={C.purple} radius={[0, 6, 6, 0]} />
+            <Bar dataKey="activos" name="Activos" fill={C.green} radius={[0, 6, 6, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
 
+      {/* Participantes del año que completaron las 600 horas */}
+      <Completaron600Card />
+
+      {/* Estudiantes que participan en varios proyectos */}
+      <MultiProyectoChart data={apiMultiProyecto} />
+
       {/* Req 5 — Métricas por institución (gráfico apilado) */}
       <ChartCard
         title="Métricas de Proyectos por Institución"
-        subtitle={
-          metrics.metricasPorInstitucion.length > TOP_INSTITUCIONES
-            ? `Top ${TOP_INSTITUCIONES} de ${metrics.metricasPorInstitucion.length} instituciones por total de proyectos (activos, en progreso y cerrados). La tabla inferior incluye todas.`
-            : 'Comparativa de proyectos activos, en progreso y cerrados por cada institución aliada'
-        }
+        subtitle={`Comparativa de proyectos activos, en progreso y cerrados de las ${metrics.metricasPorInstitucion.length} instituciones aliadas, de más a menos proyectos`}
         exportId="chart-instituciones"
       >
-        {topInstituciones.length === 0 ? (
+        {institucionesOrdenadas.length === 0 ? (
           <p className="empty-chart">No hay instituciones para mostrar.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={Math.max(220, topInstituciones.length * 30 + 60)}>
-            <BarChart data={topInstituciones} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+          <ResponsiveContainer width="100%" height={barChartHeight(institucionesOrdenadas.length)}>
+            <BarChart data={institucionesOrdenadas} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
               <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
               <YAxis
@@ -490,7 +853,7 @@ export default function DashboardPage() {
                 tickFormatter={(value: string) => (value.length > 34 ? `${value.slice(0, 33)}…` : value)}
               />
               <Tooltip content={<CustomTooltip />} />
-              <Legend />
+              <Legend verticalAlign="top" />
               <Bar dataKey="activos" name="Activos" fill={C.green} stackId="a" />
               <Bar dataKey="progreso" name="En progreso" fill={C.yellow} stackId="a" />
               <Bar dataKey="cerrados" name="Cerrados" fill={C.gray} stackId="a" radius={[0, 4, 4, 0]} />
@@ -505,7 +868,7 @@ export default function DashboardPage() {
           <h3 className="dash-chart-title">Tabla Detallada por Institución</h3>
           <p className="dash-chart-subtitle">Resumen completo incluyendo estudiantes en servicio social externo por institución aliada</p>
         </div>
-        <div className="dash-table-wrapper">
+        <div className="dash-table-wrapper dash-scroll">
           <table className="dash-table">
             <thead>
               <tr>

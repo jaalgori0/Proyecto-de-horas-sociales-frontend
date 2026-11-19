@@ -20,6 +20,8 @@ export type Proyecto = {
   imagen?: string;
   descripcion: string;
   equipo: string[];
+  /** Códigos de clasificación (SS_INTERNO, SS_EXTERNO, PROFESIONALIZANTE, CONTACTO_REALIDAD). */
+  clasificaciones?: string[];
 };
 
 export type Institucion = {
@@ -27,6 +29,10 @@ export type Institucion = {
   nombre: string;
   sigla: string;
   ubicacion: string;
+  direccion?: string;
+  contactoNombre?: string;
+  contactoEmail?: string;
+  telefono?: string;
   tipo?: string;
   image?: string;
   descripcion: string;
@@ -77,4 +83,4 @@ export type MiembroEquipo = {
   cargo: string;
   carrera: string;
   activo: boolean;
-};
+};

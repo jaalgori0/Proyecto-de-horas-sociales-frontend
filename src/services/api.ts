@@ -213,6 +213,16 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
   return response.json() as Promise<T>;
 }
 
+// ─── Clasificación de proyectos (no excluyentes) ─────────────────────────────
+export const PROJECT_CLASIFICACIONES = ['SS_INTERNO', 'SS_EXTERNO', 'PROFESIONALIZANTE', 'CONTACTO_REALIDAD'] as const;
+export type ProjectClasificacion = (typeof PROJECT_CLASIFICACIONES)[number];
+export const PROJECT_CLASIFICACION_LABELS: Record<ProjectClasificacion, string> = {
+  SS_INTERNO: 'Servicio social interno',
+  SS_EXTERNO: 'Servicio social externo',
+  PROFESIONALIZANTE: 'Profesionalizante',
+  CONTACTO_REALIDAD: 'Contacto con la realidad',
+};
+
 export type CreateProjectPayload = {
   institutionId?: string;
   institutionName: string;
@@ -223,6 +233,8 @@ export type CreateProjectPayload = {
   facultad: string;
   carreras: string[];
   titulo: string;
+  /** Al menos una. Las horas se registran como internas si incluye SS_INTERNO. */
+  clasificaciones: ProjectClasificacion[];
   ubicacion: string;
   descripcion: string;
   resumen?: string;
@@ -265,6 +277,7 @@ export type ProjectListResponse = {
   cuposTotales?: number | null;
   /** Inscritos totales, incluidas participaciones finalizadas. */
   estudiantesAsignados?: number;
+  clasificaciones?: ProjectClasificacion[];
 };
 
 export type ProjectMapResponse = {
@@ -299,6 +312,10 @@ export type InstitutionListResponse = {
   nombre: string;
   tipo?: string | null;
   ubicacion: string;
+  direccion?: string | null;
+  contactoNombre?: string | null;
+  contactoEmail?: string | null;
+  telefono?: string | null;
   image?: string | null;
   totalProyectosActivos: number;
   totalEstudiantesAsignados: number;
@@ -317,7 +334,12 @@ export type InstitutionDetailResponse = {
   image?: string | null;
   tipo?: string | null;
   nombre: string;
+  sigla?: string | null;
   ubicacion: string;
+  direccion?: string | null;
+  contactoNombre?: string | null;
+  contactoEmail?: string | null;
+  telefono?: string | null;
   descripcion: string;
   totalProyectosActivos: number;
   totalEstudiantesAsignados: number;
@@ -365,6 +387,7 @@ export type ProjectDetailResponse = {
   hombres?: number;
   mujeres?: number;
   desplegados?: string | null;
+  clasificaciones?: ProjectClasificacion[];
 };
 
 export function parseCsvList(value: string) {
@@ -400,6 +423,7 @@ export type UpdateProjectPayload = {
   facultad?: string;
   carreras?: string[];
   titulo?: string;
+  clasificaciones?: ProjectClasificacion[];
   ubicacion?: string;
   descripcion?: string;
   resumen?: string;
@@ -480,6 +504,8 @@ export type DashboardSummaryResponse = {
   totalActiveEnrollments: number;
   totalMarkers: number;
   totalStudentsExternal: number;
+  /** Estudiantes con participación en 2+ proyectos (historial completo). */
+  totalStudentsMultiProject?: number;
   projectsByStatus: Array<{ estado: string; total: string }>;
   trendByYear: Array<{ anio: string; estudiantes: number; proyectos: number }>;
   genderSummary: GenderSummaryResponse;
@@ -523,13 +549,21 @@ export type TablaInstitucionRow = {
 // ── Llamadas API ─────────────────────────────────────────────────────────────
 
 /** Req 1 — Alumnos en horas sociales por carrera y año */
-export function getStudentsByCarreraAndYear() {
-  return request<CarreraAnioRow[]>('/dashboard/carrera-anio');
+/**
+ * Por carrera y año. 'estudiantes' = personas distintas; 'participaciones' =
+ * inscripciones (un estudiante en 3 proyectos cuenta 3).
+ */
+export type CarreraAnioMetrica = 'estudiantes' | 'participaciones';
+
+export function getStudentsByCarreraAndYear(metrica: CarreraAnioMetrica = 'estudiantes') {
+  return request<CarreraAnioRow[]>(`/dashboard/carrera-anio?metrica=${metrica}`);
 }
 
 /** Req 2 — Género (también disponible en summary.genderSummary) */
-export function getGenderSummaryAPI() {
-  return request<GenderSummaryResponse>('/dashboard/genero');
+/** Sin `facultyId`: todas las facultades. Con él: solo estudiantes de esa facultad (por su carrera). */
+export function getGenderSummaryAPI(facultyId?: string | number) {
+  const query = facultyId ? `?facultyId=${encodeURIComponent(String(facultyId))}` : '';
+  return request<GenderSummaryResponse>(`/dashboard/genero${query}`);
 }
 
 /** Req 3 — Tendencia anual */
@@ -555,6 +589,60 @@ export function getProjectMetricsByInstitution() {
 /** Req 7 — Tabla detallada por institución */
 export function getInstitutionDetailTable() {
   return request<TablaInstitucionRow[]>('/dashboard/tabla-institucion');
+}
+
+/** Estudiante con 2+ proyectos (historial completo, sin el proyecto de sistema). */
+export type EstudianteMultiProyectoRow = {
+  studentId: string;
+  nombre: string;
+  carnet: string;
+  carrera: string;
+  /** Proyectos distintos en los que participa o participó. */
+  proyectos: number;
+  /** De ellos, con participación activa hoy. */
+  activos: number;
+  titulos: string[];
+};
+
+export function getStudentsInMultipleProjects() {
+  return request<EstudianteMultiProyectoRow[]>('/dashboard/estudiantes-multiproyecto');
+}
+
+/** Participante del año que completó el requisito de 600 h. */
+export type Completaron600Row = {
+  studentId: string;
+  nombre: string;
+  carnet: string;
+  carrera: string;
+  facultad: string;
+  /** Horas registradas dentro del año consultado. */
+  horasAnio: number;
+  /** Historial acumulado hasta el 31 de diciembre del año consultado. */
+  horasAcumuladas: number;
+};
+
+export type Completaron600Response = {
+  anio: number | null;
+  /** Años con participantes (ascendente). */
+  anios: number[];
+  requisito: number;
+  participantes: number;
+  completaron: number;
+  pendientes: number;
+  porcentaje: number;
+  estudiantes: Completaron600Row[];
+};
+
+/**
+ * De quienes realizaron horas sociales en `anio`, cuántos y quiénes completaron
+ * las 600 h (historial acumulado hasta el cierre de ese año). Sin `anio`: el más reciente.
+ */
+export function getCompletaron600(anio?: number | string, facultyId?: string | number) {
+  const params = new URLSearchParams();
+  if (anio) params.set('anio', String(anio));
+  if (facultyId) params.set('facultyId', String(facultyId));
+  const query = params.toString();
+  return request<Completaron600Response>(`/dashboard/completaron-600${query ? `?${query}` : ''}`);
 }
 
 /** Género por municipio (para marcadores del mapa) */
@@ -630,9 +718,16 @@ export function updateStudentEnrollment(
   });
 }
 
-export type UpdateInstitutionPayload = {
+export type InstitutionContactPayload = {
+  contactoNombre?: string | null;
+  contactoEmail?: string | null;
+  telefono?: string | null;
+};
+
+export type UpdateInstitutionPayload = InstitutionContactPayload & {
   nombre?: string;
   ubicacion?: string;
+  direccion?: string | null;
   descripcion?: string;
   tipo?: string | null;
   image_url?: string | null;
@@ -649,17 +744,18 @@ export async function deleteProject(projectId: string | number): Promise<void> {
   await request<unknown>(`/projects/${projectId}`, { method: 'DELETE' });
 }
 
-export type CreateInstitutionPayload = {
+export type CreateInstitutionPayload = InstitutionContactPayload & {
   nombre: string;
-  sigla: string;
+  sigla?: string;
   ubicacion: string;
+  direccion?: string;
   tipo?: string;
   descripcion: string;
   image_url?: string | null;
 };
 
 export function createInstitution(payload: CreateInstitutionPayload) {
-  return request('/institutions', {
+  return request<InstitutionDetailResponse>('/institutions', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

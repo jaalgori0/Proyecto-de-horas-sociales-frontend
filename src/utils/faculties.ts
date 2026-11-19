@@ -22,6 +22,9 @@ const facultyCareerMap: Record<Exclude<FacultyFilter, 'Todas las facultades'>, s
     'industrial',
     'construccion',
     'construcción',
+    // Licenciatura en Diseño pertenece a Ingeniería y Arquitectura (migración 009 del backend).
+    'diseno',
+    'diseño',
   ],
   'Ciencias Sociales y Humanidades': [
     'sociologia',
@@ -43,8 +46,6 @@ const facultyCareerMap: Record<Exclude<FacultyFilter, 'Todas las facultades'>, s
     'mercadeo',
     'marketing',
     'publicidad',
-    'diseno',
-    'diseño',
     'administracion',
     'administración',
     'relaciones publicas',
@@ -72,9 +73,9 @@ export function normalizeFacultyLabel(value?: string | null) {
   const fixed = FACULTY_FILTERS.find((faculty) => normalizeText(faculty) === text);
   if (fixed) return fixed;
 
-  if (text.includes('ingenier') || text.includes('arquitect')) return 'Arquitectura e Ingenierías';
+  if (text.includes('ingenier') || text.includes('arquitect') || text.includes('disen')) return 'Arquitectura e Ingenierías';
   if (text.includes('sociolog') || text.includes('psicolog') || text.includes('educ')) return 'Ciencias Sociales y Humanidades';
-  if (text.includes('mercade') || text.includes('comunic') || text.includes('administr') || text.includes('disen')) return 'Comunicación y Mercadeo';
+  if (text.includes('mercade') || text.includes('comunic') || text.includes('administr')) return 'Comunicación y Mercadeo';
 
   return value?.trim() ?? '';
 }

@@ -7,9 +7,11 @@ import {
   getCareers, 
   toDataUrl, 
   FacultyResponse, 
-  CareerResponse 
+  CareerResponse,
+  type ProjectClasificacion,
 } from '../services/api';
 import { Field } from './ui';
+import ProjectClassificationsField from './ProjectClassificationsField';
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   return (
@@ -69,6 +71,8 @@ export default function CreateProjectModal({
   const [institutionLocation, setInstitutionLocation] = useState('');
   const [institutionDescription, setInstitutionDescription] = useState('');
   const [title, setTitle] = useState('');
+  // Por defecto externo (comportamiento previo); se pueden marcar varias.
+  const [clasificaciones, setClasificaciones] = useState<ProjectClasificacion[]>(['SS_EXTERNO']);
   const [location, setLocation] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -165,16 +169,8 @@ export default function CreateProjectModal({
       return;
     }
 
-    if (!institutionImageDataUrl) {
-      const msg = 'Debes subir una imagen de la institución';
-      setError(msg);
-      showToast(msg, 'error');
-      setIsSaving(false);
-      return;
-    }
-
-    if (!projectImageDataUrl) {
-      const msg = 'Debes subir una imagen del proyecto';
+    if (clasificaciones.length === 0) {
+      const msg = 'Seleccione al menos una clasificación del proyecto';
       setError(msg);
       showToast(msg, 'error');
       setIsSaving(false);
@@ -187,18 +183,19 @@ export default function CreateProjectModal({
         institutionType,
         institutionLocation,
         institutionDescription,
-        institutionImage: institutionImageDataUrl,
+        // Imágenes opcionales: sin imagen no se envía el campo.
+        institutionImage: institutionImageDataUrl ?? undefined,
         facultad: facultyName,
         carreras: selectedCareersNames,
         titulo: title,
+        clasificaciones,
         ubicacion: location,
         descripcion: description,
         resumen: description.slice(0, 160),
         fechaInicio: startDate || undefined,
         fechaCierre: endDate || undefined,
         cupos: slots ? Number(slots) : undefined,
-        projectImage: projectImageDataUrl,
-        image: projectImageDataUrl,
+        projectImage: projectImageDataUrl ?? undefined,
         students: [],
       });
 
@@ -407,6 +404,7 @@ export default function CreateProjectModal({
               </div>
 
               <Field label="Nombre del proyecto" placeholder="Ej. Campaña de salud comunitaria" icon={<Plus size={18} />} value={title} onChange={(event) => setTitle(event.target.value)} required />
+              <ProjectClassificationsField value={clasificaciones} onChange={setClasificaciones} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0', backgroundColor: '#ffffff' }}>
               <label style={{ fontSize: '0.875rem', fontWeight: 700, color: '#1e293b' }}>
                 Ubicación del proyecto <span style={{ color: '#e53e3e' }}>*</span>
@@ -456,7 +454,7 @@ export default function CreateProjectModal({
             />
 
             <div className="modal-image-field">
-              <span className="modal-image-label">Imagen de la institución</span>
+              <span className="modal-image-label">Imagen de la institución (opcional)</span>
               {institutionPreviewUrl ? (
                 <div className="modal-image-preview">
                   <img src={institutionPreviewUrl} alt="Vista previa de la institución" />
@@ -478,7 +476,7 @@ export default function CreateProjectModal({
             </div>
 
             <div className="modal-image-field">
-              <span className="modal-image-label">Imagen del proyecto</span>
+              <span className="modal-image-label">Imagen del proyecto (opcional)</span>
               {projectPreviewUrl ? (
                 <div className="modal-image-preview">
                   <img src={projectPreviewUrl} alt="Vista previa del proyecto" />

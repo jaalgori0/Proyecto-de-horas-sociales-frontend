@@ -294,3 +294,68 @@
   font-size: 0.875rem;
   margin-top: 0.5rem;
 }
+/* ── Scroll interno uniforme ─────────────────────────────────────
+   Todas las tarjetas del dashboard muestran sus datos completos (sin
+   recortar a un top N) dentro de un contenedor de altura máxima con
+   scroll vertical, para que la página no crezca sin límite. */
+.dash-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Reserva el espacio de la barra: evita que los gráficos responsivos
+     cambien de ancho (y se redibujen) cuando aparece el scroll. */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+}
+.dash-scroll::-webkit-scrollbar { width: 8px; }
+.dash-scroll::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); border-radius: 8px; }
+.dash-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* KPIs: margen para que la elevación del hover no se corte. */
+.dash-kpi-scroll { padding: 4px 2px 2px; }
+
+/* Tabla: scroll en ambos ejes, encabezado y totales fijos. */
+.dash-table-wrapper.dash-scroll { overflow-x: auto; }
+.dash-table-wrapper.dash-scroll .dash-table th { position: sticky; top: 0; z-index: 1; }
+.dash-table-wrapper.dash-scroll .dash-table-total td { position: sticky; bottom: 0; z-index: 1; }
+
+/* Exportación a Excel: se capturan los gráficos completos. */
+.dash-exporting .dash-scroll { max-height: none !important; overflow: visible !important; }
+
+@media print {
+  .dash-scroll { max-height: none !important; overflow: visible !important; }
+}
+
+/* Tooltip del gráfico de estudiantes en varios proyectos (lista de títulos). */
+.dash-tooltip-wide { max-width: 340px; }
+.dash-tooltip-list { margin: 6px 0 0; padding-left: 16px; font-size: 0.78rem; color: #4b5670; }
+.dash-tooltip-list li { margin: 1px 0; }
+
+/* Selector de conteo (estudiantes únicos / participaciones) + total del año */
+.dash-metric-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 14px;
+}
+.dash-metric-toggle { display: flex; flex-wrap: wrap; gap: 8px; }
+.dash-metric-total { margin: 0; font-size: 0.88rem; color: var(--muted); }
+.dash-metric-total strong { color: var(--text); font-size: 1.05rem; }
+
+/* Selector de facultad (tarjeta de género) */
+.dash-select-label { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; color: var(--muted); min-width: 0; }
+.dash-select {
+  max-width: 100%;
+  min-width: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.dash-select:focus { outline: 2px solid color-mix(in srgb, var(--blue) 35%, transparent); border-color: var(--blue); }
