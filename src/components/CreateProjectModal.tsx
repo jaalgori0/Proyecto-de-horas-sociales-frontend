@@ -169,24 +169,8 @@ export default function CreateProjectModal({
       return;
     }
 
-    if (!institutionImageDataUrl) {
-      const msg = 'Debes subir una imagen de la institución';
-      setError(msg);
-      showToast(msg, 'error');
-      setIsSaving(false);
-      return;
-    }
-
     if (clasificaciones.length === 0) {
       const msg = 'Seleccione al menos una clasificación del proyecto';
-      setError(msg);
-      showToast(msg, 'error');
-      setIsSaving(false);
-      return;
-    }
-
-    if (!projectImageDataUrl) {
-      const msg = 'Debes subir una imagen del proyecto';
       setError(msg);
       showToast(msg, 'error');
       setIsSaving(false);
@@ -199,7 +183,8 @@ export default function CreateProjectModal({
         institutionType,
         institutionLocation,
         institutionDescription,
-        institutionImage: institutionImageDataUrl,
+        // Imágenes opcionales: sin imagen no se envía el campo.
+        institutionImage: institutionImageDataUrl ?? undefined,
         facultad: facultyName,
         carreras: selectedCareersNames,
         titulo: title,
@@ -210,8 +195,7 @@ export default function CreateProjectModal({
         fechaInicio: startDate || undefined,
         fechaCierre: endDate || undefined,
         cupos: slots ? Number(slots) : undefined,
-        projectImage: projectImageDataUrl,
-        image: projectImageDataUrl,
+        projectImage: projectImageDataUrl ?? undefined,
         students: [],
       });
 
@@ -470,7 +454,7 @@ export default function CreateProjectModal({
             />
 
             <div className="modal-image-field">
-              <span className="modal-image-label">Imagen de la institución</span>
+              <span className="modal-image-label">Imagen de la institución (opcional)</span>
               {institutionPreviewUrl ? (
                 <div className="modal-image-preview">
                   <img src={institutionPreviewUrl} alt="Vista previa de la institución" />
@@ -492,7 +476,7 @@ export default function CreateProjectModal({
             </div>
 
             <div className="modal-image-field">
-              <span className="modal-image-label">Imagen del proyecto</span>
+              <span className="modal-image-label">Imagen del proyecto (opcional)</span>
               {projectPreviewUrl ? (
                 <div className="modal-image-preview">
                   <img src={projectPreviewUrl} alt="Vista previa del proyecto" />

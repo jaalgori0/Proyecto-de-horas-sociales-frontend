@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   Download, FileSpreadsheet, Users, BookOpen,
-  Building2, MapPin, GraduationCap, ChevronDown, UserCheck,
+  Building2, MapPin, GraduationCap, ChevronDown, UserCheck, Award,
 } from 'lucide-react';
 import { exportToExcelFormatted } from '../utils/exportExcel';
 import { Notice } from '../components/ui';
@@ -23,6 +23,8 @@ import {
   getTrendByYear,
   getGenderSummaryAPI,
   getFaculties,
+  getCompletaron600,
+  type Completaron600Response,
   type DashboardSummaryResponse,
   type GenderSummaryResponse,
   type InstitutionListResponse,
@@ -395,6 +397,147 @@ function GeneroChart({ general }: { general: { hombres: number; mujeres: number;
   );
 }
 
+// Participantes del año que completaron las 600 horas (historial acumulado al cierre del año)
+function Completaron600Card() {
+  const [faculties, setFaculties] = useState<FacultyResponse[]>([]);
+  const [facultyId, setFacultyId] = useState<string>(TODAS_LAS_FACULTADES);
+  /** '' = el backend elige el año más reciente con participantes. */
+  const [anio, setAnio] = useState<string>('');
+  const [datos, setDatos] = useState<Completaron600Response | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+  const [reintento, setReintento] = useState(0);
+
+  useEffect(() => {
+    getFaculties()
+      .then((list) => setFaculties([...list].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))))
+      .catch(() => setFaculties([]));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setCargando(true);
+    setError('');
+    getCompletaron600(anio || undefined, facultyId || undefined)
+      .then((r) => {
+        if (!active) return;
+        // Si el año elegido no tiene participantes en la facultad nueva, se pasa al más reciente.
+        if (anio && r.anios.length > 0 && !r.anios.includes(Number(anio))) {
+          setAnio(String(r.anios[r.anios.length - 1]));
+          return;
+        }
+        setDatos(r);
+      })
+      .catch((err) => {
+        if (active) setError(describeApiError(err, 'No se pudo cargar quiénes completaron las 600 horas.'));
+      })
+      .finally(() => {
+        if (active) setCargando(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [anio, facultyId, reintento]);
+
+  const anioActual = datos?.anio != null ? String(datos.anio) : '';
+  const requisito = datos?.requisito ?? 600;
+  const facultadNombre = faculties.find((f) => String(f.id) === facultyId)?.nombre;
+
+  return (
+    <ChartCard
+      title={`Estudiantes que Completaron las ${requisito} Horas`}
+      subtitle={`De las personas que realizaron horas sociales en el año seleccionado${facultadNombre ? ` (${facultadNombre})` : ''}, cuántas completaron el requisito según su historial acumulado hasta el cierre de ese año`}
+      exportId="chart-completaron-600"
+      headerExtra={
+        <div className="dash-metric-bar">
+          <label className="dash-select-label">
+            <span>Facultad</span>
+            <select
+              className="dash-select"
+              value={facultyId}
+              onChange={(e) => setFacultyId(e.target.value)}
+              disabled={faculties.length === 0}
+            >
+              <option value={TODAS_LAS_FACULTADES}>Todas las facultades</option>
+              {faculties.map((f) => (
+                <option key={f.id} value={String(f.id)}>{f.nombre}</option>
+              ))}
+            </select>
+          </label>
+          {datos && !error && anioActual ? (
+            <p className="dash-metric-total">
+              {anioActual}: <strong>{datos.completaron.toLocaleString('es-SV')}</strong> de{' '}
+              <strong>{datos.participantes.toLocaleString('es-SV')}</strong> participantes ({datos.porcentaje}%)
+            </p>
+          ) : null}
+        </div>
+      }
+    >
+      {error ? (
+        <div className="empty-chart">
+          {error}{' '}
+          <button type="button" className="dash-year-btn" onClick={() => setReintento((n) => n + 1)}>Reintentar</button>
+        </div>
+      ) : !datos ? (
+        <p className="empty-chart">{cargando ? 'Cargando…' : 'Sin datos.'}</p>
+      ) : datos.anios.length === 0 ? (
+        <p className="empty-chart">No hay participaciones registradas para mostrar.</p>
+      ) : (
+        <>
+          <div className="dash-year-selector">
+            {datos.anios.map((y) => (
+              <button
+                key={y}
+                type="button"
+                className={`dash-year-btn ${anioActual === String(y) ? 'active' : ''}`}
+                onClick={() => setAnio(String(y))}
+                disabled={cargando}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+          <div className="dash-kpi-grid" style={{ marginBottom: 16 }}>
+            <KpiCard icon={<Users size={22} />} label={`Participantes ${anioActual}`} value={datos.participantes} sub="Realizaron horas sociales ese año" color={C.blue} />
+            <KpiCard icon={<Award size={22} />} label={`Completaron ${requisito} h`} value={datos.completaron} sub={`${datos.porcentaje}% de los participantes`} color={C.green} />
+            <KpiCard icon={<GraduationCap size={22} />} label="Aún sin completar" value={datos.pendientes} sub={`Menos de ${requisito} h al cierre de ${anioActual}`} color={C.orange} />
+          </div>
+          {datos.estudiantes.length === 0 ? (
+            <p className="empty-chart">
+              Ningún participante de {anioActual} había completado las {requisito} horas al cierre de ese año.
+            </p>
+          ) : (
+            <div className="dash-table-wrapper">
+              <table className="dash-table">
+                <thead>
+                  <tr>
+                    <th>Estudiante</th>
+                    <th>Carnet</th>
+                    <th>Carrera</th>
+                    <th>Horas en {anioActual}</th>
+                    <th>Horas acumuladas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {datos.estudiantes.map((e) => (
+                    <tr key={e.studentId}>
+                      <td><strong>{e.nombre}</strong></td>
+                      <td>{e.carnet}</td>
+                      <td>{e.carrera}</td>
+                      <td className="dash-num">{e.horasAnio.toLocaleString('es-SV')}</td>
+                      <td className="dash-num dash-num-green"><strong>{e.horasAcumuladas.toLocaleString('es-SV')}</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
 // Estudiantes con 2+ proyectos y la cantidad exacta de cada uno
 const MultiProyectoTooltip = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null;
@@ -681,6 +824,9 @@ export default function DashboardPage() {
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
+
+      {/* Participantes del año que completaron las 600 horas */}
+      <Completaron600Card />
 
       {/* Estudiantes que participan en varios proyectos */}
       <MultiProyectoChart data={apiMultiProyecto} />
