@@ -1684,12 +1684,25 @@ img {
   margin-top: 10px;
 }
 
+/* Imagen de proyecto: se muestra con su proporción original, sin recortes y sin
+   agrandarse más allá de su tamaño natural (solo se reduce si no cabe). */
+.project-detail-media {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f3f6fb;
+}
+
 .project-main-img {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: 24px;
-  object-fit: cover;
-  box-shadow: 0 10px 24px rgba(18, 37, 77, 0.08);
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 16px;
 }
 
 .status-badge-active {
@@ -4610,11 +4623,22 @@ input[type="checkbox"].check:checked {
   max-height: 200px;
 }
 
+.modal-image-preview {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f3f6fb;
+  min-height: 120px;
+}
+
+/* Vista previa con la proporción original de la imagen (sin recortar ni agrandar). */
 .modal-image-preview img {
-  width: 100%;
-  height: 200px;
-  object-fit: cover;
   display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
 }
 
 .modal-image-overlay {

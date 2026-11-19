@@ -608,6 +608,43 @@ export function getStudentsInMultipleProjects() {
   return request<EstudianteMultiProyectoRow[]>('/dashboard/estudiantes-multiproyecto');
 }
 
+/** Participante del año que completó el requisito de 600 h. */
+export type Completaron600Row = {
+  studentId: string;
+  nombre: string;
+  carnet: string;
+  carrera: string;
+  facultad: string;
+  /** Horas registradas dentro del año consultado. */
+  horasAnio: number;
+  /** Historial acumulado hasta el 31 de diciembre del año consultado. */
+  horasAcumuladas: number;
+};
+
+export type Completaron600Response = {
+  anio: number | null;
+  /** Años con participantes (ascendente). */
+  anios: number[];
+  requisito: number;
+  participantes: number;
+  completaron: number;
+  pendientes: number;
+  porcentaje: number;
+  estudiantes: Completaron600Row[];
+};
+
+/**
+ * De quienes realizaron horas sociales en `anio`, cuántos y quiénes completaron
+ * las 600 h (historial acumulado hasta el cierre de ese año). Sin `anio`: el más reciente.
+ */
+export function getCompletaron600(anio?: number | string, facultyId?: string | number) {
+  const params = new URLSearchParams();
+  if (anio) params.set('anio', String(anio));
+  if (facultyId) params.set('facultyId', String(facultyId));
+  const query = params.toString();
+  return request<Completaron600Response>(`/dashboard/completaron-600${query ? `?${query}` : ''}`);
+}
+
 /** Género por municipio (para marcadores del mapa) */
 export type GeneroMunicipioRow = { municipio: string; hombres: number; mujeres: number };
 

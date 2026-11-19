@@ -1008,7 +1008,7 @@ function ProjectMapDetail({
       <div className="stack-list cards-scroll sidebar-projects-list">
         <div className="project-detail-card-single">
           {projectImage ? (
-            <div className="project-detail-hero">
+            <div className="project-detail-media">
               <img
                 src={projectImage}
                 alt={project.titulo}
@@ -1111,4 +1111,4 @@ function ProjectMapDetail({
       </div>
     </div>
   );
-}
+}

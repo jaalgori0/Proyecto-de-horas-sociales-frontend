@@ -47,6 +47,8 @@ export default function EditProjectModal({
 
   const [projectPreviewUrl, setProjectPreviewUrl] = useState<string | null>(project.imagen);
   const [projectImageDataUrl, setProjectImageDataUrl] = useState<string | null>(null);
+  /** true si el usuario quitó la imagen actual del proyecto (se envía null para borrarla). */
+  const [projectImageRemoved, setProjectImageRemoved] = useState(false);
   const [institutionPreviewUrl, setInstitutionPreviewUrl] = useState<string | null>((project as any).institutionImageUrl ?? null);
   const [institutionImageDataUrl, setInstitutionImageDataUrl] = useState<string | null>(null);
 
@@ -139,6 +141,7 @@ export default function EditProjectModal({
     void toDataUrl(file).then((dataUrl) => {
       setProjectPreviewUrl(dataUrl);
       setProjectImageDataUrl(dataUrl);
+      setProjectImageRemoved(false);
     });
   }
 
@@ -184,7 +187,7 @@ export default function EditProjectModal({
         institutionType,
         institutionLocation,
         institutionDescription,
-        institutionImage: institutionImageDataUrl,
+        institutionImage: institutionImageDataUrl ?? undefined,
         facultad: currentFacultyName,
         carreras: careerNames,
         titulo: title,
@@ -194,7 +197,9 @@ export default function EditProjectModal({
         fechaInicio: startDate || undefined,
         fechaCierre: endDate || undefined,
         cupos: slots ? Number(slots) : undefined,
-        projectImage: projectImageDataUrl,
+        // Imagen opcional: nueva → se envía; quitada → null (se borra); sin tocar → no se envía
+        // (antes se mandaba null siempre y cada edición borraba la imagen existente).
+        projectImage: projectImageDataUrl ?? (projectImageRemoved ? null : undefined),
       });
 
       showToast('Proyecto actualizado correctamente', 'success');
@@ -419,7 +424,7 @@ export default function EditProjectModal({
                 <div className="modal-image-preview">
                   <img src={projectPreviewUrl} alt="Vista previa proyecto" />
                   <div className="modal-image-overlay">
-                    <button type="button" className="modal-image-remove" onClick={() => { setProjectPreviewUrl(null); setProjectImageDataUrl(null); }} aria-label="Quitar imagen">
+                    <button type="button" className="modal-image-remove" onClick={() => { setProjectPreviewUrl(null); setProjectImageDataUrl(null); setProjectImageRemoved(true); if (projectFileInputRef.current) projectFileInputRef.current.value = ''; }} aria-label="Quitar imagen">
                       <X size={14} /> Quitar imagen
                     </button>
                   </div>

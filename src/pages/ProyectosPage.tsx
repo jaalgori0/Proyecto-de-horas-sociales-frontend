@@ -381,6 +381,10 @@ export function ProyectoDetallePage() {
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [deletingProject, setDeletingProject] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Imagen opcional del proyecto: sin imagen (o si falla al cargar) se muestra el recuadro de texto.
+  const heroImage: string | null = resolveProjectImage(project);
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
+  useEffect(() => setHeroImageFailed(false), [heroImage]);
 
   function showToast(msg: string) {
     setSuccessToast(msg);
@@ -634,10 +638,13 @@ export function ProyectoDetallePage() {
           background: 'linear-gradient(135deg, #1a2f6e 0%, #2f68ec 60%, #21c08a 100%)',
         }}
       >
+        {/* Fondo decorativo fijo: la imagen del proyecto no se estira a todo el encabezado;
+            se muestra aparte con su proporción original. */}
         <img
-          src={resolveProjectImage(project) ?? '/images/ProjectsDirectoryDetailedView.jpeg'}
-          alt={project.nombre}
-          onError={(e) => { try { e.currentTarget.src = '/images/ProjectsDirectoryDetailedView.jpeg'; } catch { } }}
+          src="/images/ProjectsDirectoryDetailedView.jpeg"
+          alt=""
+          aria-hidden="true"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
           style={{
             position: 'absolute',
             inset: 0,
@@ -731,6 +738,8 @@ export function ProyectoDetallePage() {
               alignSelf: 'stretch',
               justifySelf: 'end',
               minHeight: 150,
+              display: 'grid',
+              placeItems: 'center',
               borderRadius: 18,
               overflow: 'hidden',
               border: '1px solid rgba(255,255,255,0.18)',
@@ -738,13 +747,15 @@ export function ProyectoDetallePage() {
               boxShadow: '0 16px 28px rgba(0,0,0,0.14)',
             }}
           >
-            <>
+            {heroImage && !heroImageFailed ? (
+              // Proporción original: se reduce si no cabe, nunca se agranda ni se recorta.
               <img
-                src={resolveProjectImage(project) ?? ''}
+                src={heroImage}
                 alt={project.nombre}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                style={{ width: '100%', height: '100%', minHeight: 150, objectFit: 'cover', display: 'block' }}
+                onError={() => setHeroImageFailed(true)}
+                style={{ display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: 220, objectFit: 'contain' }}
               />
+            ) : (
               <div style={{ width: '100%', height: '100%', minHeight: 150, display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,0.9)' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
@@ -753,7 +764,7 @@ export function ProyectoDetallePage() {
                   <div style={{ fontSize: '1rem', fontWeight: 800, marginTop: 6 }}>{project.institution}</div>
                 </div>
               </div>
-            </>
+            )}
           </div>
         </div>
       </div>
