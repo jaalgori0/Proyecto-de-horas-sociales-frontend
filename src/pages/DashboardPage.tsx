@@ -97,6 +97,17 @@ function useMetrics(
     const externosSub = `Activos y finalizados ${anioExternos}` +
       (inscripcionesExterno != null ? ` · ${inscripcionesExterno} participaciones` : '');
     const totalProyectos = apiSummary?.totalProjects ?? apiProjects.length;
+    // Desglose: Excel CSS «Memoria de Labores» frente a los que solo vienen en los PDF de horas.
+    // Texto corto en la tarjeta (≈210 px); el largo queda como tooltip.
+    const proyectosCss = apiSummary?.totalProjectsReporteCss;
+    const proyectosSinCss = apiSummary?.totalProjectsSinReporteCss;
+    const hayDesglose = proyectosCss != null && proyectosSinCss != null;
+    const proyectosSub = hayDesglose
+      ? `${proyectosCss} en reporte CSS · ${proyectosSinCss} solo en PDF`
+      : 'Todas las instituciones';
+    const proyectosHint = hayDesglose
+      ? `${proyectosCss} en Memoria de Labores · ${proyectosSinCss} solo en reportes de horas (PDF)`
+      : undefined;
     const totalInstituciones = apiSummary?.totalInstitutions ?? apiInstitutions.length;
 
     // Req 2 — Género: endpoint dedicado; si no, el del summary; si no, los marcadores reales.
@@ -121,7 +132,7 @@ function useMetrics(
     const tendenciaAnual = apiTendencia.length > 0 ? apiTendencia : (apiSummary?.trendByYear ?? []);
 
     return {
-      totalEstudiantesExterno, externosSub, totalProyectos, totalInstituciones,
+      totalEstudiantesExterno, externosSub, totalProyectos, proyectosSub, proyectosHint, totalInstituciones,
       totalMunicipios, totalHombres, totalMujeres, totalSinGenero,
       generoData, metricasPorInstitucion, tendenciaAnual,
     };
@@ -131,8 +142,10 @@ function useMetrics(
 // exportToExcel está en src/utils/exportExcel.ts — importado arriba como exportToExcelFormatted
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
-function KpiCard({ icon, label, value, sub, color }: {
-  icon: React.ReactNode; label: string; value: string | number; sub?: string; color: string;
+function KpiCard({ icon, label, value, sub, subHint, color }: {
+  icon: React.ReactNode; label: string; value: string | number; sub?: string;
+  /** Texto completo del subtítulo (tooltip) cuando `sub` es una versión abreviada. */
+  subHint?: string; color: string;
 }) {
   return (
     <div className="dash-kpi-card" style={{ '--kpi-color': color } as React.CSSProperties}>
@@ -140,7 +153,7 @@ function KpiCard({ icon, label, value, sub, color }: {
       <div className="dash-kpi-body">
         <span className="dash-kpi-label">{label}</span>
         <strong className="dash-kpi-value">{value}</strong>
-        {sub && <span className="dash-kpi-sub">{sub}</span>}
+        {sub && <span className="dash-kpi-sub" title={subHint}>{sub}</span>}
       </div>
     </div>
   );
@@ -759,7 +772,7 @@ export default function DashboardPage() {
       <div className="dash-scroll dash-kpi-scroll">
       <div className="dash-kpi-grid">
         <KpiCard icon={<UserCheck size={22} />} label="Estudiantes en Servicio Social Externo" value={metrics.totalEstudiantesExterno} sub={metrics.externosSub} color={C.blue} />
-        <KpiCard icon={<BookOpen size={22} />} label="Proyectos Totales" value={metrics.totalProyectos} sub="Todas las instituciones" color={C.green} />
+        <KpiCard icon={<BookOpen size={22} />} label="Proyectos Totales" value={metrics.totalProyectos} sub={metrics.proyectosSub} subHint={metrics.proyectosHint} color={C.green} />
         <KpiCard icon={<Building2 size={22} />} label="Instituciones Aliadas" value={metrics.totalInstituciones} sub="Públicas y privadas" color={C.purple} />
         <KpiCard icon={<MapPin size={22} />} label="Municipios con Proyectos" value={metrics.totalMunicipios} sub="Cobertura nacional" color={C.teal} />
         <KpiCard icon={<Users size={22} />} label="Hombres en Servicio Social" value={metrics.totalHombres} sub={hayGenero ? `${pctH}% del total` : 'Sin datos de género'} color={C.blue} />

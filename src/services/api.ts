@@ -507,7 +507,14 @@ export function updateProject(projectId: string | number, payload: UpdateProject
 
 export type DashboardSummaryResponse = {
   totalInstitutions: number;
+  /** Proyectos de SS externo, sin el proyecto interno de asignaciones manuales. */
   totalProjects: number;
+  /** De totalProjects, los que vienen en el Excel CSS «Memoria de Labores». */
+  totalProjectsReporteCss?: number;
+  /** De totalProjects, los que no vienen en el Excel (solo en los PDF de horas o creados en la app). */
+  totalProjectsSinReporteCss?: number;
+  /** Año aplicado a los proyectos (?anio); null = total acumulado. */
+  anioProyectos?: number | null;
   totalActiveEnrollments: number;
   totalMarkers: number;
   /** Estudiantes distintos en SS externo en `anioExternos` (activos + finalizados). */
