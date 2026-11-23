@@ -224,6 +224,8 @@ export const PROJECT_CLASIFICACION_LABELS: Record<ProjectClasificacion, string> 
 };
 
 export type CreateProjectPayload = {
+  /** Guardar aunque exista un proyecto/institución con nombre equivalente (tras ver el 409 *_SIMILAR). */
+  confirmarSimilar?: boolean;
   institutionId?: string;
   institutionName: string;
   institutionType: string;
@@ -277,6 +279,9 @@ export type ProjectListResponse = {
   cuposTotales?: number | null;
   /** Inscritos totales, incluidas participaciones finalizadas. */
   estudiantesAsignados?: number;
+  /** Participaciones por género (las que no son de hombres ni mujeres: sin género registrado). */
+  hombres?: number;
+  mujeres?: number;
   clasificaciones?: ProjectClasificacion[];
 };
 
@@ -414,6 +419,8 @@ export function createProject(payload: CreateProjectPayload) {
 }
 
 export type UpdateProjectPayload = {
+  /** Guardar aunque exista un proyecto/institución con nombre equivalente (tras ver el 409 *_SIMILAR). */
+  confirmarSimilar?: boolean;
   institutionId?: string | number;
   institutionName?: string;
   institutionType?: string;
@@ -503,7 +510,12 @@ export type DashboardSummaryResponse = {
   totalProjects: number;
   totalActiveEnrollments: number;
   totalMarkers: number;
+  /** Estudiantes distintos en SS externo en `anioExternos` (activos + finalizados). */
   totalStudentsExternal: number;
+  /** Participaciones del año sin deduplicar (un estudiante en 3 proyectos cuenta 3), incluidas las abandonadas. */
+  totalEnrollmentsExternal?: number;
+  /** Año de la tarjeta (el más reciente con participaciones). */
+  anioExternos?: number | null;
   /** Estudiantes con participación en 2+ proyectos (historial completo). */
   totalStudentsMultiProject?: number;
   projectsByStatus: Array<{ estado: string; total: string }>;
@@ -725,6 +737,8 @@ export type InstitutionContactPayload = {
 };
 
 export type UpdateInstitutionPayload = InstitutionContactPayload & {
+  /** Guardar aunque exista un proyecto/institución con nombre equivalente (tras ver el 409 *_SIMILAR). */
+  confirmarSimilar?: boolean;
   nombre?: string;
   ubicacion?: string;
   direccion?: string | null;
@@ -745,6 +759,8 @@ export async function deleteProject(projectId: string | number): Promise<void> {
 }
 
 export type CreateInstitutionPayload = InstitutionContactPayload & {
+  /** Guardar aunque exista un proyecto/institución con nombre equivalente (tras ver el 409 *_SIMILAR). */
+  confirmarSimilar?: boolean;
   nombre: string;
   sigla?: string;
   ubicacion: string;
@@ -786,15 +802,36 @@ export function getCareers() {
 export type ImportBatchEstado = 'PREVISUALIZADO' | 'CONFIRMADO' | 'DESCARTADO';
 export type ImportItemEstado = 'NUEVO' | 'IGNORADO' | 'ADVERTENCIA' | 'CONFLICTO';
 export type ImportItemEntidad = 'INSTITUCION' | 'PROYECTO' | 'ESTUDIANTE' | 'PARTICIPACION' | 'FILA_PDF' | 'FILA_XLS';
-export type ImportItemAccion = 'INSERTAR' | 'COMPLETAR' | 'NINGUNA';
+/** ACTUALIZAR: participación existente que cambia (Activo → Finalizada o ajuste de horas aceptado). */
+export type ImportItemAccion = 'INSERTAR' | 'COMPLETAR' | 'ACTUALIZAR' | 'NINGUNA';
 
 export type ImportConteo = Record<ImportItemEstado, number>;
+
+export type ImportMetricasMaestro = {
+  participacionesActivas: number;
+  participacionesFinalizadas: number;
+  participacionesRetiradas: number;
+  participantes: number;
+  horasTotales: number;
+  proyectosFinalizados: number;
+  estudiantesCon600: number;
+};
+
+/** Efecto de confirmar: el backend aplica el lote dentro de un SAVEPOINT y revierte. */
+export type ImportImpacto =
+  | { ok: true; antes: ImportMetricasMaestro; despues: ImportMetricasMaestro; delta: ImportMetricasMaestro }
+  | { ok: false; error: string };
 
 export type ImportResumen = {
   total: ImportConteo;
   porEntidad: Partial<Record<ImportItemEntidad, ImportConteo>>;
   /** Horas que entrarán con las participaciones nuevas. */
   horasNuevas: number;
+  /** Participaciones existentes que se actualizarán. */
+  actualizar?: number;
+  /** Horas CSS que suman esas actualizaciones. */
+  horasActualizadas?: number;
+  impacto?: ImportImpacto | null;
 };
 
 export type ImportConciliacion = {
@@ -802,6 +839,9 @@ export type ImportConciliacion = {
   extraido: number;
   reporte: number | null;
   ok: boolean;
+  /** Filas/horas quitadas o cambiadas en la revisión en línea (con justificación). */
+  ajuste?: number;
+  extraidoOriginal?: number;
 };
 
 export type ImportFile = {
@@ -852,6 +892,9 @@ export type ImportBatchSummary = {
   confirmadoEn: string | null;
   resumen: ImportResumen | Record<string, never>;
   resultado: ImportResultado | null;
+  /** Se devuelve al revisar y al confirmar: detecta cambios hechos por otra persona. */
+  huella?: string | null;
+  revision?: { ediciones: number; exclusiones: number; decisiones: number };
 };
 
 export type ImportBatchListItem = ImportBatchSummary & { archivos: number };
@@ -919,11 +962,11 @@ export type ConfirmImportResult =
   /** Se perdió la respuesta y el lote todavía no figura como confirmado (puede seguir procesándose). */
   | { status: 'sin_respuesta'; batch: ImportBatchDetail; message: string };
 
-export async function confirmImport(id: string): Promise<ConfirmImportResult> {
+export async function confirmImport(id: string, huella?: string | null): Promise<ConfirmImportResult> {
   try {
     const batch = await request<ImportBatchDetail>(
       `/imports/${encodeURIComponent(id)}/confirm`,
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify(huella ? { huella } : {}) },
       { timeoutMs: CONFIRM_TIMEOUT_MS },
     );
     return { status: 'confirmado', batch };
@@ -960,6 +1003,86 @@ export async function confirmImport(id: string): Promise<ConfirmImportResult> {
 
 export function discardImport(id: string) {
   return request<void>(`/imports/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ─── Revisión en línea de la vista previa (sin editar Excel) ──────────────────
+
+/** Campo ausente: sin cambio. null: vuelve al valor del PDF. Fechas 'DD/MM/AAAA' ('01/01/1900' = sin fecha). */
+export type ImportRowCambios = {
+  estado?: 'Activo' | 'Finalizado' | 'Abandonado' | null;
+  horas?: number | null;
+  fechaInicio?: string | null;
+  fechaFin?: string | null;
+};
+
+export type ImportDecision = 'ACEPTAR_REPORTE' | 'CONSERVAR_BD';
+
+export type ImportReviewLogEntry = {
+  id: number;
+  accion: 'EDITAR' | 'EXCLUIR' | 'RESTAURAR' | 'DECIDIR';
+  pdfRowId: number | null;
+  clave: string | null;
+  valorOriginal: Record<string, unknown> | null;
+  valorAnterior: Record<string, unknown> | null;
+  valorNuevo: Record<string, unknown> | null;
+  justificacion: string;
+  actor: string;
+  creadoEn: string;
+};
+
+/** 409 REVISION_DESACTUALIZADA: otra persona cambió el lote; `batch` es la versión actual. */
+export type ReviewResult = { status: 'ok'; batch: ImportBatchDetail } | { status: 'desactualizado'; batch: ImportBatchDetail; message: string };
+
+async function reviewRequest(path: string, init: RequestInit): Promise<ReviewResult> {
+  try {
+    return { status: 'ok', batch: await request<ImportBatchDetail>(path, init) };
+  } catch (error) {
+    const details = error instanceof ApiError ? (error.details as { code?: string; lote?: ImportBatchDetail } | undefined) : undefined;
+    if (error instanceof ApiError && error.status === 409 && details?.code === 'REVISION_DESACTUALIZADA' && details.lote) {
+      return { status: 'desactualizado', batch: details.lote, message: error.message };
+    }
+    throw error;
+  }
+}
+
+const importPath = (id: string, rest = '') => `/imports/${encodeURIComponent(id)}${rest}`;
+
+export function editImportRow(id: string, rowId: number, body: { huella: string; justificacion: string; cambios: ImportRowCambios }) {
+  return reviewRequest(importPath(id, `/filas/${rowId}`), { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function excludeImportRow(id: string, rowId: number, body: { huella: string; justificacion: string }) {
+  return reviewRequest(importPath(id, `/filas/${rowId}/excluir`), { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function restoreImportRow(id: string, rowId: number, body: { huella: string; justificacion: string }) {
+  return reviewRequest(importPath(id, `/filas/${rowId}/restaurar`), { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function decideImportParticipation(
+  id: string,
+  body: { huella: string; justificacion: string; clave: string; decision: ImportDecision },
+) {
+  return reviewRequest(importPath(id, '/decisiones'), { method: 'POST', body: JSON.stringify(body) });
+}
+
+export type ImportProjectLinkDecision = 'VINCULAR' | 'CREAR_NUEVO';
+
+/** Proyecto del lote que coincide con uno creado en la app: VINCULAR (projectId) o CREAR_NUEVO. */
+export function linkImportProject(
+  id: string,
+  body: { huella: string; justificacion: string; clave: string; decision: ImportProjectLinkDecision; projectId?: string },
+) {
+  return reviewRequest(importPath(id, '/proyectos/vincular'), { method: 'POST', body: JSON.stringify(body) });
+}
+
+/** 24 h más de vigencia (también si ya venció y conserva revisión guardada). */
+export function renewImport(id: string) {
+  return request<ImportBatchDetail>(importPath(id, '/renovar'), { method: 'POST', body: '{}' });
+}
+
+export function getImportReviewLog(id: string) {
+  return request<ImportReviewLogEntry[]>(importPath(id, '/revision'));
 }
 
 // ─── Perfil del estudiante y horas manuales ──────────────────────────────────

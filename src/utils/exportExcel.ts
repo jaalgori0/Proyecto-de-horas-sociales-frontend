@@ -75,6 +75,8 @@ async function embedChart(
 export async function exportToExcelFormatted(
   metrics: {
     totalEstudiantesExterno: number;
+    /** Subtítulo de la tarjeta (año y criterio); por defecto, el año actual. */
+    externosSub?: string;
     totalProyectos: number;
     totalInstituciones: number;
     totalMunicipios: number;
@@ -159,7 +161,7 @@ export async function exportToExcelFormatted(
   r++;
 
   const kpis = [
-    { label: 'Estudiantes en\nServicio Social Externo', val: metrics.totalEstudiantesExterno, sub: `Total activos ${new Date().getFullYear()}`, argb: COL.azulMedio },
+    { label: 'Estudiantes en\nServicio Social Externo', val: metrics.totalEstudiantesExterno, sub: metrics.externosSub ?? `Activos y finalizados ${new Date().getFullYear()}`, argb: COL.azulMedio },
     { label: 'Proyectos\nTotales',                     val: metrics.totalProyectos,           sub: 'Todas las instituciones',               argb: 'FF21C08A'    },
     { label: 'Instituciones\nAliadas',                 val: metrics.totalInstituciones,       sub: 'Públicas y privadas',                   argb: 'FF7C5CBF'    },
     { label: 'Municipios con\nProyectos',              val: metrics.totalMunicipios,          sub: 'Cobertura nacional',                    argb: 'FF00B4D8'    },

@@ -2,6 +2,7 @@ import { Building2, CalendarDays, ImagePlus, Layers3, MapPinned, Plus, X } from 
 import { useEffect, useRef, useState } from 'react';
 import { toDataUrl, updateProject, getFaculties, getCareers } from '../services/api';
 import { Field } from './ui';
+import SimilarRecordsNotice, { parseSimilar, type SimilarInfo } from './SimilarRecordsNotice';
 import type { ProjectDetailResponse, FacultyResponse, CareerResponse, ProjectClasificacion } from '../services/api';
 import ProjectClassificationsField from './ProjectClassificationsField';
 import { Trash2, Pencil } from 'lucide-react';
@@ -54,6 +55,10 @@ export default function EditProjectModal({
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [similar, setSimilar] = useState<SimilarInfo | null>(null);
+  /** true solo en el reenvío tras "guardar igual" (confirmarSimilar). */
+  const confirmSimilarRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const [studentToEdit, setStudentToEdit] = useState<EnrolledStudent | null>(null);
@@ -182,6 +187,7 @@ export default function EditProjectModal({
 
     try {
       await updateProject(project.id, {
+        confirmarSimilar: confirmSimilarRef.current || undefined,
         institutionId: (project as any).institutionId ?? undefined,
         institutionName,
         institutionType,
@@ -202,11 +208,18 @@ export default function EditProjectModal({
         projectImage: projectImageDataUrl ?? (projectImageRemoved ? null : undefined),
       });
 
+      confirmSimilarRef.current = false;
       showToast('Proyecto actualizado correctamente', 'success');
       onSaved?.();
 
       setTimeout(() => { onClose(); }, 1500);
     } catch (err) {
+      const sim = parseSimilar(err);
+      if (sim) {
+        confirmSimilarRef.current = false;
+        setSimilar(sim);
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'No se pudo actualizar el proyecto';
       setError(msg);
       showToast(msg, 'error');
@@ -247,7 +260,7 @@ export default function EditProjectModal({
       `}</style>
 
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Editar proyecto">
-        <form className="modal-card modal-card-wide" onSubmit={handleSubmit}>
+        <form ref={formRef} className="modal-card modal-card-wide" onSubmit={handleSubmit}>
           <div className="modal-header">
             <h2>Editar proyecto</h2>
             <button className="icon-btn small" type="button" onClick={onClose} aria-label="Cerrar modal">
@@ -440,6 +453,18 @@ export default function EditProjectModal({
             </div>
             </div>
 
+            {similar ? (
+              <SimilarRecordsNotice
+                info={similar}
+                busy={isSaving}
+                onCancel={() => setSimilar(null)}
+                onConfirm={() => {
+                  confirmSimilarRef.current = true;
+                  setSimilar(null);
+                  formRef.current?.requestSubmit();
+                }}
+              />
+            ) : null}
             {error ? <p className="modal-error">{error}</p> : null}
             {/* ── Estudiantes inscritos ─────────────────────────── */}
             <div style={{ marginTop: '24px' }}>

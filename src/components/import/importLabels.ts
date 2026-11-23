@@ -24,11 +24,11 @@ export const itemEstadoConfig: Record<ImportItemEstado, { label: string; plural:
   },
   ADVERTENCIA: {
     label: 'Advertencia', plural: 'Advertencias', color: '#92400e', bg: '#fef3c7', dot: '#f59e0b',
-    help: 'Se procesan con observaciones: campos vacíos que se completarán o datos que difieren (se conserva lo existente).',
+    help: 'Se procesan con observaciones: campos vacíos que se completarán, participaciones que se actualizarán (Activo → Finalizada o ajuste aceptado) o datos que difieren (se conserva lo existente).',
   },
   CONFLICTO: {
     label: 'Conflicto', plural: 'Conflictos', color: '#9a3412', bg: '#ffedd5', dot: '#f97316',
-    help: 'No se cargarán: filas inválidas o registros existentes con horas, estado o fechas distintos. Requieren revisión manual.',
+    help: 'No se cargarán hasta resolverlos: filas inválidas (corríjalas o exclúyalas aquí mismo), ajustes de horas que esperan su decisión, o cambios que retroceden el historial (estrictos).',
   },
 };
 
@@ -84,6 +84,26 @@ const motivoLabels: Record<string, string> = {
   estado_difiere: 'El estado difiere del registrado',
   fecha_inicio_difiere: 'La fecha de inicio difiere',
   fecha_fin_difiere: 'La fecha de fin difiere',
+  retroceso_de_estado: 'Retrocede el estado registrado (no se permite)',
+  horas_disminuyen: 'Las horas bajan respecto de las registradas (no se permite)',
+  finaliza_en_reporte: 'Finalizó en el reporte: se actualizará estado, cierre y horas',
+  ajuste_horas_finalizada: 'Más horas en una participación ya finalizada',
+  requiere_decision: 'Requiere su decisión: aceptar el reporte o conservar la base',
+  decision_aceptar_reporte: 'Decisión: aceptar el reporte',
+  decision_conservar_bd: 'Decisión: conservar lo de la base',
+  fila_editada_en_revision: 'Fila corregida en la revisión',
+  // Nombres equivalentes (mayúsculas, tildes, espacios, puntuación) — migración 014
+  adopta_institucion_nombre_similar: 'Se vincula a una institución de la app con nombre equivalente',
+  varias_instituciones_app_similares: 'Varias instituciones de la app tienen un nombre equivalente',
+  institucion_app_similar_repetida_en_lote: 'Varias instituciones del lote coinciden con la misma de la app',
+  institucion_similar_con_otro_codigo: 'Parecida a una institución con otro código CSS',
+  titulo_similar_no_identico: 'El título difiere solo en formato (mayúsculas, tildes, puntuación)',
+  requiere_vincular_proyecto_app: 'Coincide con un proyecto creado en la app: vincúlelo o confirme que es otro',
+  vinculo_repetido: 'Dos correlativos vinculados al mismo proyecto de la app',
+  vinculado_en_revision: 'Vinculado en la revisión a un proyecto de la app',
+  se_crea_aunque_existe_en_app: 'Se crea aunque existe uno parecido en la app (confirmado)',
+  similar_a_proyecto_importado: 'Parecido a un proyecto ya importado con otro correlativo',
+  fila_excluida_en_revision: 'Fila excluida en la revisión',
   celda_dividida_por_posicion: 'Celda separada por posición (revisar)',
   fila_cortada_entre_paginas: 'Fila cortada entre páginas',
   // Filas inválidas
@@ -154,6 +174,11 @@ export function motivoLabel(motivo: string): string {
 export function motivoTone(motivo: string): 'warn' | 'danger' | 'info' {
   const code = motivo.split(':')[0]!;
   if (code.startsWith('completa') || code === 'adopta_proyecto_sin_correlativo') return 'info';
+  if (code === 'finaliza_en_reporte' || code.startsWith('decision_') || code === 'fila_editada_en_revision' || code === 'fila_excluida_en_revision') return 'info';
+  if (code === 'retroceso_de_estado' || code === 'horas_disminuyen') return 'danger';
+  if (code === 'requiere_vincular_proyecto_app' || code === 'vinculo_repetido' || code === 'varias_instituciones_app_similares'
+      || code === 'institucion_app_similar_repetida_en_lote') return 'danger';
+  if (code === 'vinculado_en_revision' || code === 'adopta_institucion_nombre_similar' || code === 'titulo_similar_no_identico') return 'info';
   if (code.endsWith('_difieren') || code.endsWith('_difiere') || code.includes('conflicto') || code.includes('invalid')) return 'danger';
   return 'warn';
 }
@@ -165,6 +190,7 @@ export const completarLabels: Record<string, string> = {
   fecha_inicio: 'Fecha de inicio',
   fecha_cierre: 'Fecha de cierre',
   area_css: 'Área temática',
+  alumnos_css: 'Alumnos (reporte CSS)',
 };
 
 // ─── Resultado de la confirmación ─────────────────────────────────────────────
@@ -177,6 +203,8 @@ export const resultadoLabels: Record<string, string> = {
   participaciones_insertadas: 'Participaciones nuevas',
   carreras_de_proyecto: 'Carreras vinculadas a proyectos',
   movimientos_de_horas: 'Movimientos de horas',
+  participaciones_actualizadas: 'Participaciones actualizadas',
+  movimientos_actualizados: 'Horas del CSS actualizadas',
   // Datos que el reporte no trae y el backend infiere (solo completa vacíos)
   generos_inferidos: 'Géneros inferidos por nombre',
   instituciones_ubicadas: 'Instituciones ubicadas',
@@ -299,6 +327,14 @@ export function compareItem(item: ImportItem): ComparisonRow[] {
         row('Fecha de inicio', formatDate(d.fechaInicio), base(e?.fechaInicio, formatDate)),
         row('Fecha de cierre', formatDate(d.fechaCierre), base(e?.fechaCierre, formatDate)),
         row('Área temática', text(d.areaCss), base(e?.areaCss)),
+        row('Alumnos (reporte CSS)', text(d.alumnosCss), base(e?.alumnosCss)),
+        ...(Array.isArray(d.candidatosApp) && d.candidatosApp.length > 0
+          ? [row('Coincide en la app con', (d.candidatosApp as Array<{ titulo: string }>).map((c) => c.titulo).join(' · '), null)]
+          : []),
+        ...(Array.isArray(d.similaresImportados) && d.similaresImportados.length > 0
+          ? [row('Parecido a importados', (d.similaresImportados as Array<{ titulo: string; correlativo: string }>)
+              .map((c) => `${c.titulo} (correlativo ${c.correlativo})`).join(' · '), null)]
+          : []),
       ];
     case 'ESTUDIANTE':
       return [
@@ -323,6 +359,7 @@ export function compareItem(item: ImportItem): ComparisonRow[] {
         row('Estado', text(d.estado), null),
         row('Fechas', `${text(d.fechaInicio)} → ${text(d.fechaFin)}`, null),
         row('Horas', text(d.horas), null),
+        ...revisionRows(d, row),
       ];
     case 'FILA_XLS':
       return [
@@ -331,6 +368,17 @@ export function compareItem(item: ImportItem): ComparisonRow[] {
         row('Fechas', `${text(d.fechaInicio)} → ${text(d.fechaFin)}`, null),
       ];
   }
+}
+
+/** Fila corregida o excluida en la revisión en línea: lo que traía el PDF y la justificación. */
+function revisionRows(d: Record<string, unknown>, row: (campo: string, archivo: string, base: string | null) => ComparisonRow): ComparisonRow[] {
+  const o = d.original as Record<string, unknown> | undefined;
+  const filas: ComparisonRow[] = [];
+  if (o && (d.editada === true || d.excluida === true)) {
+    filas.push(row('Original del PDF', `${text(o.estado)} · ${text(o.horas)} h · ${text(o.fechaInicio)} → ${text(o.fechaFin)}`, null));
+  }
+  if (d.excluida === true) filas.push(row('Excluida', `${text(d.justificacion)} (${text(d.excluidaPor)})`, null));
+  return filas;
 }
 
 /** Texto plano del ítem para la búsqueda. */

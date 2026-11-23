@@ -19,7 +19,7 @@ function normalizeVisibleStatus(estado: string) {
 
 /**
  * Cupos e inscritos tal como los calcula el backend (dinámicos desde project_enrollments):
- *   - inscritos: participaciones ASIGNADA/EN_CURSO/FINALIZADA (lo que se lista en el proyecto).
+ *   - inscritos: participaciones ASIGNADA/EN_CURSO/FINALIZADA/RETIRADA (las abandonadas cuentan, como en el reporte del CSS).
  *   - ocupados:  ASIGNADA/EN_CURSO, las únicas que ocupan cupo hoy.
  *   - limite:    projects.cupos; null si el proyecto no define cupos (los importados del CSS
  *                no los traen). Sin límite NO se inventa un total.

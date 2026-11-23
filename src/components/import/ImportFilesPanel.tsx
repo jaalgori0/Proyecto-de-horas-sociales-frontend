@@ -73,6 +73,12 @@ function FileRow({ file }: { file: ImportFile }) {
               <span className="imp-reconcile-ref">
                 {c.reporte === null ? 'sin total impreso' : c.ok ? 'cuadra con el reporte' : `el reporte dice ${formatNumber(c.reporte)}`}
               </span>
+              {c.ajuste ? (
+                <span className="imp-reconcile-ref">
+                  {`${c.ajuste > 0 ? '+' : '−'}${formatNumber(Math.abs(c.ajuste))} ajuste justificado en la revisión`}
+                  {c.extraidoOriginal !== undefined ? ` (extraído: ${formatNumber(c.extraidoOriginal)})` : ''}
+                </span>
+              ) : null}
             </div>
           ))}
         </div>

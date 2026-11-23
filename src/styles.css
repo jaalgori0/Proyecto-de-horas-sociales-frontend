@@ -5173,3 +5173,56 @@ select.field-input:focus {
   color: var(--blue-deep);
   white-space: nowrap;
 }
+
+/* ─── Aviso de nombre equivalente (409 PROYECTO_SIMILAR / INSTITUCION_SIMILAR) ─── */
+.similar-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #f5c26b;
+  border-radius: 12px;
+  background: #fffaf0;
+  color: #5b3a00;
+  font-size: 0.9rem;
+}
+
+.similar-notice strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.similar-notice p {
+  margin: 0;
+}
+
+.similar-notice ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.similar-notice li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.similar-notice a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.similar-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}

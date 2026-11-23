@@ -11,6 +11,9 @@ export type ImportActionCounts = {
   completar: number;
   conflictos: number;
   horasNuevas: number;
+  /** Participaciones existentes que se actualizan (Activo → Finalizada o ajuste aceptado). */
+  actualizar: number;
+  horasActualizadas: number;
 };
 
 export default function ImportActions({
@@ -28,7 +31,7 @@ export default function ImportActions({
   onDiscard: () => void;
 }) {
   const [pending, setPending] = useState<'confirm' | 'discard' | null>(null);
-  const nothingToWrite = counts.insertar === 0 && counts.completar === 0;
+  const nothingToWrite = counts.insertar === 0 && counts.completar === 0 && counts.actualizar === 0;
 
   if (pending === 'confirm') {
     return (
@@ -38,13 +41,17 @@ export default function ImportActions({
           <li>Se insertarán <strong>{formatNumber(counts.insertar)}</strong> registros nuevos
             {counts.horasNuevas > 0 ? <> con <strong>{formatNumber(counts.horasNuevas)}</strong> horas</> : null}.</li>
           <li>Se completarán <strong>{formatNumber(counts.completar)}</strong> registros con campos vacíos.</li>
+          {counts.actualizar > 0 ? (
+            <li>Se actualizarán <strong>{formatNumber(counts.actualizar)}</strong> participaciones existentes
+              (estado, cierre y <strong>+{formatNumber(counts.horasActualizadas)}</strong> horas del CSS). Las horas manuales no se tocan.</li>
+          ) : null}
           {counts.conflictos > 0 ? (
             <li>
               <strong>{formatNumber(counts.conflictos)}</strong> {counts.conflictos === 1 ? 'conflicto' : 'conflictos'}{' '}
               <strong>no</strong> se {counts.conflictos === 1 ? 'cargará y queda' : 'cargarán y quedan'} para revisión manual.
             </li>
           ) : null}
-          <li>Lo que ya existe no se modifica. Esta acción no se puede deshacer.</li>
+          <li>{counts.actualizar > 0 ? 'Fuera de esas actualizaciones, lo' : 'Lo'} que ya existe no se modifica. Esta acción no se puede deshacer.</li>
         </ul>
         <div className="imp-actions-row">
           <button type="button" className="secondary-btn" disabled={busy !== null} onClick={() => setPending(null)}>Cancelar</button>
@@ -82,8 +89,8 @@ export default function ImportActions({
           <span className="muted">No hay registros nuevos ni campos por completar: confirmar solo deja el lote en el historial.</span>
         ) : (
           <span className="muted">
-            Al confirmar se insertan <strong>{formatNumber(counts.insertar)}</strong> registros y se completan{' '}
-            <strong>{formatNumber(counts.completar)}</strong>
+            Al confirmar se insertan <strong>{formatNumber(counts.insertar)}</strong> registros, se completan{' '}
+            <strong>{formatNumber(counts.completar)}</strong> y se actualizan <strong>{formatNumber(counts.actualizar)}</strong>
             {counts.conflictos > 0 ? (
               <> · {formatNumber(counts.conflictos)} {counts.conflictos === 1 ? 'conflicto se omite' : 'conflictos se omiten'}</>
             ) : null}.
