@@ -1034,7 +1034,7 @@ function ProjectMapDetail({
               ) : null}
               <p>
                 <Users size={14} />
-                {' '}{projectDetail?.estudiantesAsignados ?? project.personas} estudiantes asignados
+                {' '}{projectDetail?.estudiantesAsignados ?? project.personas} participaciones (incluye abandonos)
               </p>
             </div>
 

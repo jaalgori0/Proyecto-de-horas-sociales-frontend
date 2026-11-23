@@ -76,7 +76,7 @@ export const proyectosEstudiantes: ProyectoEstudiante[] = [
   {
     id: 'alfabetizacion-digital',
     titulo: 'Alfabetización digital para comunidades rurales',
-    facultad: 'Ciencias Sociales y Humanidades',
+    facultad: 'Facultad de Ciencias Sociales y Humanidades',
     ubicacion: 'Chalatenango',
     estudiantes: [
       { nombre: 'Valeria Cruz', cargo: 'Líder del proyecto', carrera: 'Sociología', avatar: 'VC' },
@@ -87,7 +87,7 @@ export const proyectosEstudiantes: ProyectoEstudiante[] = [
   {
     id: 'vivienda-sostenible',
     titulo: 'Prototipo de vivienda urbana sostenible',
-    facultad: 'Arquitectura e Ingenierías',
+    facultad: 'Facultad de Ingeniería y Arquitectura',
     ubicacion: 'San Salvador',
     estudiantes: [
       { nombre: 'Mateo Rivera', cargo: 'Arquitecto líder', carrera: 'Arquitectura', avatar: 'MR' },
@@ -97,7 +97,7 @@ export const proyectosEstudiantes: ProyectoEstudiante[] = [
   {
     id: 'emprendimientos-locales',
     titulo: 'Acompañamiento de comercio electrónico',
-    facultad: 'Comunicación y Mercadeo',
+    facultad: 'Facultad de Comunicaciones y Mercadeo',
     ubicacion: 'Santa Tecla',
     estudiantes: [
       { nombre: 'Camila Vargas', cargo: 'Estratega de marca', carrera: 'Mercadeo', avatar: 'CV' },

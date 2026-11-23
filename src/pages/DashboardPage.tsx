@@ -91,6 +91,11 @@ function useMetrics(
 ) {
   return useMemo(() => {
     const totalEstudiantesExterno = apiSummary?.totalStudentsExternal ?? 0;
+    // Mismo criterio que el resto de métricas del año: activos + finalizados de anioExternos.
+    const anioExternos = apiSummary?.anioExternos ?? new Date().getFullYear();
+    const inscripcionesExterno = apiSummary?.totalEnrollmentsExternal;
+    const externosSub = `Activos y finalizados ${anioExternos}` +
+      (inscripcionesExterno != null ? ` · ${inscripcionesExterno} participaciones` : '');
     const totalProyectos = apiSummary?.totalProjects ?? apiProjects.length;
     const totalInstituciones = apiSummary?.totalInstitutions ?? apiInstitutions.length;
 
@@ -116,7 +121,7 @@ function useMetrics(
     const tendenciaAnual = apiTendencia.length > 0 ? apiTendencia : (apiSummary?.trendByYear ?? []);
 
     return {
-      totalEstudiantesExterno, totalProyectos, totalInstituciones,
+      totalEstudiantesExterno, externosSub, totalProyectos, totalInstituciones,
       totalMunicipios, totalHombres, totalMujeres, totalSinGenero,
       generoData, metricasPorInstitucion, tendenciaAnual,
     };
@@ -184,7 +189,7 @@ const CARRERA_METRICAS: Record<CarreraAnioMetrica, { tab: string; serie: string;
   participaciones: {
     tab: 'Participaciones totales',
     serie: 'Participaciones',
-    total: 'participaciones (incluye a un mismo estudiante en varios proyectos)',
+    total: 'participaciones (incluye a un mismo estudiante en varios proyectos y las abandonadas)',
     vacio: 'No hay participaciones registradas para mostrar.',
   },
 };
@@ -623,7 +628,6 @@ export default function DashboardPage() {
   const hayGenero = total > 0;
   const pctH = hayGenero ? Math.round((metrics.totalHombres / total) * 100) : 0;
   const pctM = hayGenero ? 100 - pctH : 0;
-  const currentYear = new Date().getFullYear();
 
   // Datos para los gráficos de municipios (solo API)
   const estudiantesMunicipioData = apiEstudiantesMunicipio;
@@ -754,7 +758,7 @@ export default function DashboardPage() {
       {/* KPIs — incluye el total de externos (Req 6) y el desglose de género (Req 2) */}
       <div className="dash-scroll dash-kpi-scroll">
       <div className="dash-kpi-grid">
-        <KpiCard icon={<UserCheck size={22} />} label="Estudiantes en Servicio Social Externo" value={metrics.totalEstudiantesExterno} sub={`Total activos ${currentYear}`} color={C.blue} />
+        <KpiCard icon={<UserCheck size={22} />} label="Estudiantes en Servicio Social Externo" value={metrics.totalEstudiantesExterno} sub={metrics.externosSub} color={C.blue} />
         <KpiCard icon={<BookOpen size={22} />} label="Proyectos Totales" value={metrics.totalProyectos} sub="Todas las instituciones" color={C.green} />
         <KpiCard icon={<Building2 size={22} />} label="Instituciones Aliadas" value={metrics.totalInstituciones} sub="Públicas y privadas" color={C.purple} />
         <KpiCard icon={<MapPin size={22} />} label="Municipios con Proyectos" value={metrics.totalMunicipios} sub="Cobertura nacional" color={C.teal} />
