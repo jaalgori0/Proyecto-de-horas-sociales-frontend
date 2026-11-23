@@ -505,6 +505,25 @@ export function updateProject(projectId: string | number, payload: UpdateProject
   });
 }
 
+/**
+ * Filtro general de año del dashboard (criterio de la Memoria de Labores del CSS):
+ * un año = proyectos iniciados, participaciones asignadas y horas registradas ese año;
+ * 'todos' = acumulado de todos los años.
+ */
+export type AnioFiltro = number | 'todos';
+
+/** `?anio=…` para los endpoints del dashboard ('' sin año). */
+function anioQuery(anio: AnioFiltro | undefined): string {
+  return anio === undefined ? '' : `?anio=${encodeURIComponent(String(anio))}`;
+}
+
+export type DashboardAniosResponse = { anios: number[]; anioPorDefecto: number | null };
+
+/** Años con datos y el año con el que arranca el selector (el más reciente con participaciones). */
+export function getDashboardAnios() {
+  return request<DashboardAniosResponse>('/dashboard/anios');
+}
+
 export type DashboardSummaryResponse = {
   totalInstitutions: number;
   /** Proyectos de SS externo, sin el proyecto interno de asignaciones manuales. */
@@ -513,7 +532,9 @@ export type DashboardSummaryResponse = {
   totalProjectsReporteCss?: number;
   /** De totalProjects, los que no vienen en el Excel (solo en los PDF de horas o creados en la app). */
   totalProjectsSinReporteCss?: number;
-  /** Año aplicado a los proyectos (?anio); null = total acumulado. */
+  /** Año aplicado a todos los totales; null = todos los años. */
+  anio?: number | null;
+  /** Igual a `anio` (compatibilidad). */
   anioProyectos?: number | null;
   totalActiveEnrollments: number;
   totalMarkers: number;
@@ -521,7 +542,7 @@ export type DashboardSummaryResponse = {
   totalStudentsExternal: number;
   /** Participaciones del año sin deduplicar (un estudiante en 3 proyectos cuenta 3), incluidas las abandonadas. */
   totalEnrollmentsExternal?: number;
-  /** Año de la tarjeta (el más reciente con participaciones). */
+  /** Igual a `anio` (compatibilidad). */
   anioExternos?: number | null;
   /** Estudiantes con participación en 2+ proyectos (historial completo). */
   totalStudentsMultiProject?: number;
@@ -534,8 +555,9 @@ export type DashboardSummaryResponse = {
 /** `sinDato`: participantes sin género registrado (el histórico CSS no lo trae). */
 export type GenderSummaryResponse = { hombres: number; mujeres: number; sinDato?: number };
 
-export function getDashboardSummary() {
-  return request<DashboardSummaryResponse>('/dashboard/summary');
+/** Sin `anio`, el backend usa el año más reciente con participaciones. */
+export function getDashboardSummary(anio?: AnioFiltro) {
+  return request<DashboardSummaryResponse>(`/dashboard/summary${anioQuery(anio)}`);
 }
 // ── Tipos para los nuevos endpoints del dashboard ────────────────────────────
 
@@ -580,9 +602,12 @@ export function getStudentsByCarreraAndYear(metrica: CarreraAnioMetrica = 'estud
 
 /** Req 2 — Género (también disponible en summary.genderSummary) */
 /** Sin `facultyId`: todas las facultades. Con él: solo estudiantes de esa facultad (por su carrera). */
-export function getGenderSummaryAPI(facultyId?: string | number) {
-  const query = facultyId ? `?facultyId=${encodeURIComponent(String(facultyId))}` : '';
-  return request<GenderSummaryResponse>(`/dashboard/genero${query}`);
+export function getGenderSummaryAPI(facultyId?: string | number, anio?: AnioFiltro) {
+  const params = new URLSearchParams();
+  if (facultyId) params.set('facultyId', String(facultyId));
+  if (anio !== undefined) params.set('anio', String(anio));
+  const query = params.toString();
+  return request<GenderSummaryResponse>(`/dashboard/genero${query ? `?${query}` : ''}`);
 }
 
 /** Req 3 — Tendencia anual */
@@ -591,13 +616,13 @@ export function getTrendByYear() {
 }
 
 /** Req 4 — Estudiantes por municipio */
-export function getStudentsByMunicipio() {
-  return request<EstudiantesMunicipioRow[]>('/dashboard/estudiantes-municipio');
+export function getStudentsByMunicipio(anio?: AnioFiltro) {
+  return request<EstudiantesMunicipioRow[]>(`/dashboard/estudiantes-municipio${anioQuery(anio)}`);
 }
 
 /** Req 5 — Proyectos por municipio */
-export function getProjectsByMunicipio() {
-  return request<ProyectosMunicipioRow[]>('/dashboard/proyectos-municipio');
+export function getProjectsByMunicipio(anio?: AnioFiltro) {
+  return request<ProyectosMunicipioRow[]>(`/dashboard/proyectos-municipio${anioQuery(anio)}`);
 }
 
 /** Req 6 — Métricas por institución */
@@ -606,8 +631,8 @@ export function getProjectMetricsByInstitution() {
 }
 
 /** Req 7 — Tabla detallada por institución */
-export function getInstitutionDetailTable() {
-  return request<TablaInstitucionRow[]>('/dashboard/tabla-institucion');
+export function getInstitutionDetailTable(anio?: AnioFiltro) {
+  return request<TablaInstitucionRow[]>(`/dashboard/tabla-institucion${anioQuery(anio)}`);
 }
 
 /** Estudiante con 2+ proyectos (historial completo, sin el proyecto de sistema). */
@@ -623,8 +648,8 @@ export type EstudianteMultiProyectoRow = {
   titulos: string[];
 };
 
-export function getStudentsInMultipleProjects() {
-  return request<EstudianteMultiProyectoRow[]>('/dashboard/estudiantes-multiproyecto');
+export function getStudentsInMultipleProjects(anio?: AnioFiltro) {
+  return request<EstudianteMultiProyectoRow[]>(`/dashboard/estudiantes-multiproyecto${anioQuery(anio)}`);
 }
 
 /** Participante del año que completó el requisito de 600 h. */
