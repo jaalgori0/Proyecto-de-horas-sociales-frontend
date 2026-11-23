@@ -108,17 +108,21 @@ function useMetrics(
     const inscripcionesExterno = apiSummary?.totalEnrollmentsExternal;
     const externosSub = (anio === 'todos' ? 'Activos y finalizados, todos los años' : `Activos y finalizados ${anio}`) +
       (inscripcionesExterno != null ? ` · ${inscripcionesExterno} participaciones` : '');
-    const totalProyectos = apiSummary?.totalProjects ?? apiProjects.length;
-    // Desglose: Excel CSS «Memoria de Labores» frente a los que solo vienen en los PDF de horas.
-    // Texto corto en la tarjeta (≈210 px); el largo queda como tooltip.
+    // Número principal = proyectos del reporte oficial CSS («Memoria de Labores»), que es el
+    // que rige para el área. Los que solo aparecen en los PDF de horas se conservan en la base
+    // (con sus estudiantes y horas) y se informan aparte, sin sumar al número principal.
+    // Sin desglose (backend anterior) se muestra el total del sistema.
     const proyectosCss = apiSummary?.totalProjectsReporteCss;
     const proyectosSinCss = apiSummary?.totalProjectsSinReporteCss;
+    const totalProyectosSistema = apiSummary?.totalProjects ?? apiProjects.length;
     const hayDesglose = proyectosCss != null && proyectosSinCss != null;
-    const proyectosSub = hayDesglose
-      ? `${proyectosCss} en reporte CSS · ${proyectosSinCss} solo en PDF`
-      : 'Todas las instituciones';
+    const totalProyectos = hayDesglose ? proyectosCss : totalProyectosSistema;
+    // En pantalla solo la fuente; el desglose (solo en PDF, total del sistema) queda en el tooltip.
+    const proyectosSub = hayDesglose ? 'Reporte oficial CSS' : 'Todas las instituciones';
     const proyectosHint = hayDesglose
-      ? `${proyectosCss} en Memoria de Labores · ${proyectosSinCss} solo en reportes de horas (PDF)`
+      ? `${proyectosCss} proyectos en la Memoria de Labores (reporte oficial CSS). ` +
+        `Además, ${proyectosSinCss} proyectos aparecen solo en los reportes de horas (PDF): se conservan ` +
+        `con sus estudiantes y horas, pero no suman aquí. Total en el sistema: ${totalProyectosSistema}.`
       : undefined;
     const totalInstituciones = apiSummary?.totalInstitutions ?? apiInstitutions.length;
 
@@ -144,7 +148,7 @@ function useMetrics(
     const tendenciaAnual = apiTendencia.length > 0 ? apiTendencia : (apiSummary?.trendByYear ?? []);
 
     return {
-      totalEstudiantesExterno, externosSub, totalProyectos, proyectosSub, proyectosHint, totalInstituciones,
+      totalEstudiantesExterno, externosSub, totalProyectos, totalProyectosSistema, proyectosSub, proyectosHint, totalInstituciones,
       totalMunicipios, totalHombres, totalMujeres, totalSinGenero,
       generoData, metricasPorInstitucion, tendenciaAnual,
     };
@@ -831,7 +835,7 @@ export default function DashboardPage() {
       <div className="dash-scroll dash-kpi-scroll">
       <div className="dash-kpi-grid">
         <KpiCard icon={<UserCheck size={22} />} label={`Estudiantes en Servicio Social Externo${sufijoAnio(anioActivo)}`} value={metrics.totalEstudiantesExterno} sub={metrics.externosSub} color={C.blue} />
-        <KpiCard icon={<BookOpen size={22} />} label={anioActivo === 'todos' ? 'Proyectos Totales' : `Proyectos Iniciados en ${anioActivo}`} value={metrics.totalProyectos} sub={metrics.proyectosSub} subHint={metrics.proyectosHint} color={C.green} />
+        <KpiCard icon={<BookOpen size={22} />} label={anioActivo === 'todos' ? 'Proyectos (Reporte CSS)' : `Proyectos Iniciados en ${anioActivo}`} value={metrics.totalProyectos} sub={metrics.proyectosSub} subHint={metrics.proyectosHint} color={C.green} />
         <KpiCard
           icon={<Building2 size={22} />}
           label={anioActivo === 'todos' ? 'Instituciones Aliadas' : `Instituciones con Proyectos ${anioActivo}`}

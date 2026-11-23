@@ -162,7 +162,7 @@ export async function exportToExcelFormatted(
 
   const kpis = [
     { label: 'Estudiantes en\nServicio Social Externo', val: metrics.totalEstudiantesExterno, sub: metrics.externosSub ?? `Activos y finalizados ${new Date().getFullYear()}`, argb: COL.azulMedio },
-    { label: 'Proyectos\nTotales',                     val: metrics.totalProyectos,           sub: 'Todas las instituciones',               argb: 'FF21C08A'    },
+    { label: 'Proyectos\n(Reporte CSS)',               val: metrics.totalProyectos,           sub: 'Reporte oficial CSS',                   argb: 'FF21C08A'    },
     { label: 'Instituciones\nAliadas',                 val: metrics.totalInstituciones,       sub: 'Públicas y privadas',                   argb: 'FF7C5CBF'    },
     { label: 'Municipios con\nProyectos',              val: metrics.totalMunicipios,          sub: 'Cobertura nacional',                    argb: 'FF00B4D8'    },
     { label: 'Hombres en\nServicio Social',            val: metrics.totalHombres,             sub: `${pctH}% del total`,                    argb: COL.azulMedio },
