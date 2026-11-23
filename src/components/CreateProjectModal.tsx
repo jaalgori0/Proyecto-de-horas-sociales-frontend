@@ -11,6 +11,7 @@ import {
   type ProjectClasificacion,
 } from '../services/api';
 import { Field } from './ui';
+import SimilarRecordsNotice, { parseSimilar, type SimilarInfo } from './SimilarRecordsNotice';
 import ProjectClassificationsField from './ProjectClassificationsField';
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -58,6 +59,10 @@ export default function CreateProjectModal({
   
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [similar, setSimilar] = useState<SimilarInfo | null>(null);
+  /** true solo en el reenvío tras "guardar igual" (confirmarSimilar). */
+  const confirmSimilarRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Estados para Facultades y Carreras dinámicas
@@ -179,6 +184,7 @@ export default function CreateProjectModal({
 
     try {
       await createProject({
+        confirmarSimilar: confirmSimilarRef.current || undefined,
         institutionName,
         institutionType,
         institutionLocation,
@@ -199,6 +205,7 @@ export default function CreateProjectModal({
         students: [],
       });
 
+      confirmSimilarRef.current = false;
       showToast('Proyecto creado correctamente', 'success');
       onSaved?.();
 
@@ -206,6 +213,12 @@ export default function CreateProjectModal({
         onClose();
       }, 1500);
     } catch (submitError) {
+      const sim = parseSimilar(submitError);
+      if (sim) {
+        confirmSimilarRef.current = false;
+        setSimilar(sim);
+        return;
+      }
       const msg = submitError instanceof Error ? submitError.message : 'No se pudo guardar el proyecto';
       setError(msg);
       showToast(msg, 'error');
@@ -226,7 +239,7 @@ export default function CreateProjectModal({
       `}</style>
 
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Crear nuevo proyecto">
-        <form className="modal-card modal-card-wide" onSubmit={handleSubmit}>
+        <form ref={formRef} className="modal-card modal-card-wide" onSubmit={handleSubmit}>
 
           <div className="modal-header">
             <h2>Crear nuevo proyecto</h2>
@@ -497,6 +510,24 @@ export default function CreateProjectModal({
               <input ref={projectFileInputRef} type="file" accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleProjectFileChange} />
             </div>
 
+            {similar ? (
+              <SimilarRecordsNotice
+                info={similar}
+                busy={isSaving}
+                onCancel={() => setSimilar(null)}
+                onConfirm={() => {
+                  confirmSimilarRef.current = true;
+                  setSimilar(null);
+                  formRef.current?.requestSubmit();
+                }}
+                onUseInstitution={(nombre) => {
+                  setInstitutionName(nombre);
+                  setSimilar(null);
+                  // Tras el re-render con el nombre de la institución existente.
+                  setTimeout(() => formRef.current?.requestSubmit(), 0);
+                }}
+              />
+            ) : null}
             {error ? <p className="modal-error">{error}</p> : null}
           </div>
 

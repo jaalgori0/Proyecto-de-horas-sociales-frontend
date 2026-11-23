@@ -2,11 +2,14 @@
  * Vista previa del lote: pestañas por estado (Nuevos, Ignorados, Advertencias,
  * Conflictos) con contadores, filtro por entidad, búsqueda y filas expandibles con
  * la comparación "en el archivo" vs "en la base" y los campos que se completarán.
+ * Con `review`, cada ítem corregible muestra sus acciones de revisión en línea
+ * (ImportReviewActions): editar, excluir, restaurar o decidir sin editar Excel.
  */
 import { ArrowRight, ChevronDown, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ImportItem, ImportItemEntidad, ImportItemEstado } from '../../services/api';
 import { ItemEstadoBadge, MotivoTag } from './ImportBadges';
+import ImportReviewActions, { type ReviewHandlers } from './ImportReviewActions';
 import {
   ENTIDAD_ORDEN,
   ITEM_ESTADOS,
@@ -23,7 +26,7 @@ import {
 
 const PAGE_SIZE = 50;
 
-function ItemRow({ item }: { item: ImportItem }) {
+function ItemRow({ item, items, review }: { item: ImportItem; items: ImportItem[]; review: ReviewHandlers | null }) {
   const [open, setOpen] = useState(false);
   const { titulo, subtitulo } = describeItem(item);
   const match = item.estado === 'IGNORADO' ? describeMatch(item) : null;
@@ -46,6 +49,7 @@ function ItemRow({ item }: { item: ImportItem }) {
         </span>
         <span className="imp-item-side">
           {item.accion === 'COMPLETAR' ? <span className="imp-tag imp-tag-info">Completa {completar.length} campo{completar.length !== 1 ? 's' : ''}</span> : null}
+          {item.accion === 'ACTUALIZAR' ? <span className="imp-tag imp-tag-info">Se actualizará</span> : null}
           <ChevronDown size={18} className={`imp-chevron ${open ? 'imp-rotate' : ''}`} />
         </span>
       </button>
@@ -55,6 +59,8 @@ function ItemRow({ item }: { item: ImportItem }) {
           {item.motivos.map((m) => <MotivoTag key={m} motivo={m} />)}
         </div>
       ) : null}
+
+      {review ? <ImportReviewActions item={item} items={items} review={review} /> : null}
 
       {open ? (
         <div className="imp-item-detail">
@@ -105,10 +111,16 @@ export default function ImportPreview({
   items,
   conteo,
   initialTab,
+  resetKey,
+  review = null,
 }: {
   items: ImportItem[];
   conteo: Record<ImportItemEstado, number>;
   initialTab: ImportItemEstado;
+  /** Cambia al abrir otro lote o al recibir una clasificación nueva: vuelve a la pestaña sugerida. */
+  resetKey: string;
+  /** Solo en vista previa vigente: habilita la revisión en línea. */
+  review?: ReviewHandlers | null;
 }) {
   const [tab, setTab] = useState<ImportItemEstado>(initialTab);
   const [entidad, setEntidad] = useState<ImportItemEntidad | 'TODAS'>('TODAS');
@@ -116,11 +128,13 @@ export default function ImportPreview({
   const [visible, setVisible] = useState(PAGE_SIZE);
 
   // Un lote nuevo (o la vista previa actualizada tras un 409) reabre en la pestaña sugerida.
+  // Tras una corrección en línea `resetKey` no cambia: se conservan pestaña, filtro y búsqueda.
   useEffect(() => {
     setTab(initialTab);
     setEntidad('TODAS');
     setQuery('');
-  }, [items, initialTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
 
   useEffect(() => setVisible(PAGE_SIZE), [tab, entidad, query]);
 
@@ -198,7 +212,7 @@ export default function ImportPreview({
       ) : (
         <>
           <ul className="imp-items">
-            {filtered.slice(0, visible).map((item) => <ItemRow key={item.id} item={item} />)}
+            {filtered.slice(0, visible).map((item) => <ItemRow key={`${item.entidad}:${item.clave}`} item={item} items={items} review={review} />)}
           </ul>
           <div className="imp-list-footer">
             <span className="muted">

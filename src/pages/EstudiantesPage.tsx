@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { FilterGroup, Notice } from '../components/ui';
 import { describeApiError, getProjectById, getProjects } from '../services/api';
 import { FACULTY_FILTERS, facultyMatchesProject, resolveFacultyFromCareers, type FacultyFilter } from '../utils/faculties';
+import { GENERO_FILTERS, grupoGenero, parseGeneroFilter, type GeneroFilter, type GrupoGenero } from '../utils/genero';
 
 // ── tipos ─────────────────────────────────────────────────────────────────────
 type StudentCardItem = {
@@ -11,6 +12,8 @@ type StudentCardItem = {
   carrera: string;
   carnet: string;
   email: string | null;
+  /** Sin género registrado → 'Otros'. */
+  genero: GrupoGenero;
 };
 
 type StudentDirectoryProject = {
@@ -93,6 +96,7 @@ export default function EstudiantesPage() {
   const [facultyFilter, setFacultyFilter] = useState(searchParams.get('faculty') ?? 'Todas las facultades');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') ?? 'Todos');
   const [locationFilter, setLocationFilter] = useState(searchParams.get('location') ?? 'Todas');
+  const [generoFilter, setGeneroFilter] = useState<GeneroFilter>(parseGeneroFilter(searchParams.get('genero')));
   const [projects, setProjects] = useState<StudentDirectoryProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -124,10 +128,11 @@ export default function EstudiantesPage() {
             carrera: s.carrera ?? 'Sin carrera',
             carnet: s.carnet ?? '',
             email: s.email ?? null,
+            genero: grupoGenero((s as { genero?: string | null }).genero),
           }));
 
           const fallback: StudentCardItem[] = Array.isArray(project.equipo)
-            ? project.equipo.map((name) => ({ nombre: name, carrera: 'Sin carrera', carnet: '', email: null }))
+            ? project.equipo.map((name) => ({ nombre: name, carrera: 'Sin carrera', carnet: '', email: null, genero: 'Otros' as const }))
             : [];
 
           const finalStudents = students.length > 0 ? students : fallback;
@@ -172,11 +177,23 @@ export default function EstudiantesPage() {
     return () => { active = false; };
   }, [reloadKey]);
 
-  // Estudiantes distintos (por carnet) entre todos los proyectos cargados.
+  // Estudiantes distintos (por carnet) entre todos los proyectos cargados. No depende de
+  // ningún filtro: es el total general.
   const totalStudents = useMemo(
     () => new Set(projects.flatMap((p) => p.estudiantes.map((s) => s.carnet || s.nombre))).size,
     [projects]
   );
+
+  // Estudiantes distintos por grupo de género (sin género registrado → "Otros").
+  const studentsByGenero = useMemo(() => {
+    const grupos: Record<GrupoGenero, Set<string>> = { Mujeres: new Set(), Hombres: new Set(), Otros: new Set() };
+    for (const p of projects) for (const s of p.estudiantes) grupos[s.genero].add(s.carnet || s.nombre);
+    return { Mujeres: grupos.Mujeres.size, Hombres: grupos.Hombres.size, Otros: grupos.Otros.size };
+  }, [projects]);
+
+  /** Estudiantes del proyecto que pasan el filtro de género. */
+  const visibles = (project: StudentDirectoryProject) =>
+    generoFilter === 'Todos' ? project.estudiantes : project.estudiantes.filter((s) => s.genero === generoFilter);
 
   // Orden alfabético en español; "Sin ubicación" siempre al final.
   const locationOptions = useMemo(() => {
@@ -199,8 +216,10 @@ export default function EstudiantesPage() {
         project.facultad,
         project.institution,
         project.ubicacion,
-        ...project.estudiantes.map((s) => `${s.nombre ?? ''} ${s.carrera ?? ''} ${s.carnet ?? ''}`),
+        ...visibles(project).map((s) => `${s.nombre ?? ''} ${s.carrera ?? ''} ${s.carnet ?? ''}`),
       ].some((v) => v.toLowerCase().includes(query));
+    // Con un género elegido, solo quedan los proyectos con al menos un estudiante de ese grupo.
+    const matchesGenero = generoFilter === 'Todos' || visibles(project).length > 0;
     const matchesFaculty = facultyMatchesProject(facultyFilter as FacultyFilter, project.facultad, project.carreras);
     const matchesStatus =
       statusFilter === 'Todos' ||
@@ -212,7 +231,7 @@ export default function EstudiantesPage() {
         ? project.ubicacionBase === SIN_UBICACION
         : project.ubicacionBase !== SIN_UBICACION &&
           (project.ubicacion.toLowerCase().includes(sel) || project.ubicacionBase.toLowerCase().includes(sel)));
-    return matchesQuery && matchesFaculty && matchesStatus && matchesLocation;
+    return matchesQuery && matchesFaculty && matchesStatus && matchesLocation && matchesGenero;
   });
 
   return (
@@ -263,6 +282,12 @@ export default function EstudiantesPage() {
             selected={locationFilter}
             onChange={setLocationFilter}
           />
+          <FilterGroup
+            title="Género"
+            options={[...GENERO_FILTERS]}
+            selected={generoFilter}
+            onChange={(opt) => setGeneroFilter(parseGeneroFilter(opt))}
+          />
         </aside>
 
         <section className="list-panel project-team-feed">
@@ -283,6 +308,10 @@ export default function EstudiantesPage() {
               <span>
                 Mostrando <strong>{filteredProjects.length}</strong> de {projects.length} proyectos ·{' '}
                 <strong>{totalStudents}</strong> estudiantes distintos en total
+                {generoFilter !== 'Todos' ? (
+                  <> · <strong>{studentsByGenero[generoFilter]}</strong> {generoFilter.toLowerCase()}
+                    {generoFilter === 'Otros' ? ' (sin género registrado)' : ''}</>
+                ) : null}
               </span>
             </div>
           ) : null}
@@ -290,7 +319,11 @@ export default function EstudiantesPage() {
             <p className="muted">No se encontraron proyectos con esos filtros.</p>
           ) : null}
 
-          {filteredProjects.map((project) => (
+          {filteredProjects.map((project) => {
+            const shown = visibles(project);
+            const filtrando = generoFilter !== 'Todos';
+            const restantes = (filtrando ? shown.length : project.totalEstudiantes) - 3;
+            return (
             <article
               key={project.id}
               style={{
@@ -366,12 +399,14 @@ export default function EstudiantesPage() {
               {/* ── equipo del proyecto ── */}
               <div style={{ borderTop: '1px solid #edf0f8', padding: '14px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9aa3b5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Equipo del proyecto · {project.totalEstudiantes} estudiante{project.totalEstudiantes !== 1 ? 's' : ''}
+                  {filtrando
+                    ? `Equipo del proyecto · ${shown.length} de ${project.totalEstudiantes} estudiante${project.totalEstudiantes !== 1 ? 's' : ''} · ${generoFilter}`
+                    : `Equipo del proyecto · ${project.totalEstudiantes} estudiante${project.totalEstudiantes !== 1 ? 's' : ''}`}
                 </div>
 
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
-                    {project.estudiantes.slice(0, 3).map((student, index) => (
+                    {shown.slice(0, 3).map((student, index) => (
                       <div
                         key={student.carnet || `${student.nombre}-${index}`}
                         style={{
@@ -434,14 +469,14 @@ export default function EstudiantesPage() {
                     ))}
 
                     {/* Contador "+ N más" si hay más de 3 estudiantes */}
-                    {project.totalEstudiantes > 3 ? (
+                    {restantes > 0 ? (
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         padding: '10px 12px', borderRadius: 11,
                         background: '#f0f3fa', border: '1px solid #e0e6f0',
                         color: '#687182', fontSize: '0.78rem', fontWeight: 700,
                       }}>
-                        +{project.totalEstudiantes - 3} más
+                        +{restantes} más
                       </div>
                     ) : null}
                   </div>
@@ -465,7 +500,8 @@ export default function EstudiantesPage() {
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
         </section>
       </div>
     </div>

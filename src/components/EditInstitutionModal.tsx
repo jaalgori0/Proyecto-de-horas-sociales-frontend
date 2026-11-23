@@ -8,6 +8,7 @@ import {
   type InstitutionDetailResponse,
 } from '../services/api';
 import { Field } from './ui';
+import SimilarRecordsNotice, { parseSimilar, type SimilarInfo } from './SimilarRecordsNotice';
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   return (
@@ -68,6 +69,10 @@ export default function EditInstitutionModal({
   const [imageRemoved, setImageRemoved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [similar, setSimilar] = useState<SimilarInfo | null>(null);
+  /** true solo en el reenvío tras "guardar igual" (confirmarSimilar). */
+  const confirmSimilarRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   function showToast(message: string, type: 'success' | 'error') {
@@ -116,6 +121,7 @@ export default function EditInstitutionModal({
     try {
       const saved = isCreate
         ? await createInstitution({
+            confirmarSimilar: confirmSimilarRef.current || undefined,
             nombre: nombre.trim(),
             sigla: sigla.trim(),
             tipo: tipo.trim(),
@@ -126,6 +132,7 @@ export default function EditInstitutionModal({
             ...(imageDataUrl ? { image_url: imageDataUrl } : {}),
           })
         : await updateInstitution(institution.id, {
+            confirmarSimilar: confirmSimilarRef.current || undefined,
             nombre: nombre.trim(),
             tipo: tipo.trim() || null,
             ubicacion: ubicacion.trim(),
@@ -135,6 +142,7 @@ export default function EditInstitutionModal({
             ...(imageDataUrl ? { image_url: imageDataUrl } : imageRemoved ? { image_url: null } : {}),
           });
 
+      confirmSimilarRef.current = false;
       showToast(isCreate ? 'Institución creada correctamente' : 'Institución actualizada correctamente', 'success');
       onSaved?.(saved);
 
@@ -142,6 +150,12 @@ export default function EditInstitutionModal({
         onClose();
       }, 1200);
     } catch (submitError) {
+      const sim = parseSimilar(submitError);
+      if (sim) {
+        confirmSimilarRef.current = false;
+        setSimilar(sim);
+        return;
+      }
       const msg = describeApiError(
         submitError,
         isCreate ? 'No se pudo crear la institución' : 'No se pudo actualizar la institución',
@@ -165,7 +179,7 @@ export default function EditInstitutionModal({
       `}</style>
 
       <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={isCreate ? 'Nueva institución' : 'Editar institución'}>
-        <form className="modal-card modal-card-wide" onSubmit={handleSubmit}>
+        <form ref={formRef} className="modal-card modal-card-wide" onSubmit={handleSubmit}>
           <div className="modal-header">
             <h2>{isCreate ? 'Nueva institución' : 'Editar institución'}</h2>
             <button className="icon-btn small" type="button" onClick={onClose} aria-label="Cerrar modal">
@@ -273,6 +287,18 @@ export default function EditInstitutionModal({
               />
             </div>
 
+            {similar ? (
+              <SimilarRecordsNotice
+                info={similar}
+                busy={isSaving}
+                onCancel={() => setSimilar(null)}
+                onConfirm={() => {
+                  confirmSimilarRef.current = true;
+                  setSimilar(null);
+                  formRef.current?.requestSubmit();
+                }}
+              />
+            ) : null}
             {error ? <p className="modal-error">{error}</p> : null}
           </div>
 

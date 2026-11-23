@@ -16,6 +16,7 @@ import InscribirEstudianteModal from '../components/InscribirEstudianteModal';
 import CreateProjectModal from '../components/CreateProjectModal';
 import EditProjectModal from '../components/EditProjectModal/index';
 import { FACULTY_FILTERS, facultyMatchesProject, resolveFacultyFromCareers, type FacultyFilter } from '../utils/faculties';
+import { GENERO_FILTERS, conteoGeneroProyecto, parseGeneroFilter, type GeneroFilter } from '../utils/genero';
 import { ProjectListCard } from '../components/ProjectCards';
 import { BackLink, FilterGroup, Notice } from '../components/ui';
 import {
@@ -52,7 +53,7 @@ function mapDetailToProyecto(detail: any): Proyecto {
     ubicacion: detail.ubicacion ?? '',
     estado: toVisibleStatus(detail.status, detail.estado),
     imagen: (detail as any).imagen ?? (detail as any).image ?? null,
-    facultad: detail.facultad ?? resolveFacultyFromCareers(detail.carreras ?? [], null),
+    facultad: resolveFacultyFromCareers(detail.carreras ?? [], detail.facultad ?? null),
     carreras: detail.carreras ?? [],
     descripcion: detail.descripcion ?? detail.resumen ?? '',
     equipo: detail.equipo ?? [],
@@ -75,6 +76,7 @@ export function ProyectosPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('Todos');
   const [selectedLocation, setSelectedLocation] = useState('Todas');
+  const [selectedGenero, setSelectedGenero] = useState<GeneroFilter>('Todos');
   const [selectedClasificacion, setSelectedClasificacion] = useState(CLASIFICACION_TODAS);
   const [sortBy] = useState<'recentes' | 'titulo' | 'ubicacion'>('recentes');
   const [projectsData, setProjectsData] = useState<Proyecto[]>([]);
@@ -104,6 +106,8 @@ export function ProyectosPage() {
     cuposOcupados: project.cuposOcupados,
     cuposTotales: project.cuposTotales,
     estudiantesAsignados: project.estudiantesAsignados ?? project.personas,
+    hombres: project.hombres,
+    mujeres: project.mujeres,
     clasificaciones: project.clasificaciones ?? [],
   });
 
@@ -184,7 +188,9 @@ export function ProyectosPage() {
       // Un proyecto puede tener varias clasificaciones: basta con que incluya la elegida.
       const matchesClasificacion =
         !selectedClasificacionCode || (project.clasificaciones ?? []).includes(selectedClasificacionCode);
-      return matchesQuery && matchesFaculty && matchesStatus && matchesLocation && matchesClasificacion;
+      // Género: proyectos con al menos una participación de ese grupo ("Otros" = sin género registrado).
+      const matchesGenero = selectedGenero === 'Todos' || conteoGeneroProyecto(project)[selectedGenero] > 0;
+      return matchesQuery && matchesFaculty && matchesStatus && matchesLocation && matchesClasificacion && matchesGenero;
     })
     .sort((a, b) => {
       if (sortBy === 'titulo') return a.titulo.localeCompare(b.titulo);
@@ -242,6 +248,12 @@ export function ProyectosPage() {
             onChange={setSelectedClasificacion}
           />
           <FilterGroup title="Ubicación" options={locationOptions} selected={selectedLocation} onChange={setSelectedLocation} />
+          <FilterGroup
+            title="Género"
+            options={[...GENERO_FILTERS]}
+            selected={selectedGenero}
+            onChange={(opt) => setSelectedGenero(parseGeneroFilter(opt))}
+          />
         </aside>
 
         <section className="list-panel">
@@ -256,6 +268,10 @@ export function ProyectosPage() {
             <div className="list-meta">
               <span>
                 Mostrando <strong>{filteredProjects.length}</strong> de {projectsData.length} proyectos
+                {selectedGenero !== 'Todos' ? (
+                  <> · <strong>{filteredProjects.reduce((n, p) => n + conteoGeneroProyecto(p)[selectedGenero], 0)}</strong>{' '}
+                    participaciones de {selectedGenero.toLowerCase()}{selectedGenero === 'Otros' ? ' (sin género registrado)' : ''}</>
+                ) : null}
               </span>
             </div>
           ) : null}
@@ -709,7 +725,7 @@ export function ProyectoDetallePage() {
               {[
                 { icon: <Calendar size={14} />, text: `Inicio: ${formatDate(project.fechaInicio)}` },
                 { icon: <Calendar size={14} />, text: `Cierre: ${formatDate(project.fechaCierre)}` },
-                { icon: <Users size={14} />, text: `${project.estudiantesAsignados ?? project.estudiantes.length} estudiantes` },
+                { icon: <Users size={14} />, text: `${project.estudiantesAsignados ?? project.estudiantes.length} participaciones (incl. abandonos)` },
               ].map(({ icon, text }) => (
                 <div
                   key={text}
