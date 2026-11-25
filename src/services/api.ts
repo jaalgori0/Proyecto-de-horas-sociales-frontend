@@ -283,6 +283,11 @@ export type ProjectListResponse = {
   hombres?: number;
   mujeres?: number;
   clasificaciones?: ProjectClasificacion[];
+  correlativoCss?: string | null;
+  /** Viene en el Excel CSS «Memoria de Labores» (reporte oficial). */
+  enReporteCss?: boolean;
+  /** Proyecto interno del sistema (asignaciones manuales). */
+  esSistema?: boolean;
 };
 
 export type ProjectMapResponse = {
@@ -300,6 +305,10 @@ export type ProjectMapResponse = {
   municipio: string | null;
   /** `departamento` es uno de los 14 departamentos: el proyecto tiene marcador en el mapa. */
   enMapa: boolean;
+  /** Viene en el Excel CSS «Memoria de Labores» (reporte oficial). */
+  enReporteCss?: boolean;
+  /** Proyecto interno del sistema (asignaciones manuales). */
+  esSistema?: boolean;
 };
 
 export type MapMarkerResponse = {
@@ -1098,9 +1107,15 @@ export function decideImportParticipation(
   return reviewRequest(importPath(id, '/decisiones'), { method: 'POST', body: JSON.stringify(body) });
 }
 
-export type ImportProjectLinkDecision = 'VINCULAR' | 'CREAR_NUEVO';
+/**
+ * Proyecto del lote que coincide (mismo título normalizado) con otro proyecto:
+ *  - VINCULAR (projectId): es el proyecto creado en la app sin correlativo; lo adopta.
+ *  - ALIAS (projectId): su correlativo es alterno de un proyecto del reporte CSS de la
+ *    misma institución (migración 016); se registra al confirmar y no se crea copia.
+ *  - CREAR_NUEVO: es otro proyecto.
+ */
+export type ImportProjectLinkDecision = 'VINCULAR' | 'ALIAS' | 'CREAR_NUEVO';
 
-/** Proyecto del lote que coincide con uno creado en la app: VINCULAR (projectId) o CREAR_NUEVO. */
 export function linkImportProject(
   id: string,
   body: { huella: string; justificacion: string; clave: string; decision: ImportProjectLinkDecision; projectId?: string },

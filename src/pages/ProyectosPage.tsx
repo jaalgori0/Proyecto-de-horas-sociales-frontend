@@ -31,7 +31,7 @@ import {
   PROJECT_CLASIFICACIONES,
   PROJECT_CLASIFICACION_LABELS,
 } from '../services/api';
-import type { Proyecto } from '../types';
+import { ORIGEN_PROYECTO_LABELS, origenProyecto, type OrigenProyecto, type Proyecto } from '../types';
 
 function resolveProjectImage(project: any) {
   return project?.imagen ?? project?.image ?? project?.imageUrl ?? project?.projectImage ?? null;
@@ -66,6 +66,8 @@ function mapDetailToProyecto(detail: any): Proyecto {
 }
 
 const CLASIFICACION_TODAS = 'Todas';
+const ORIGEN_TODOS = 'Todos';
+const ORIGENES: OrigenProyecto[] = ['REPORTE_CSS', 'SOLO_PDF', 'APP', 'INTERNO'];
 
 // ─── ProyectosPage ────────────────────────────────────────────────────────────
 export function ProyectosPage() {
@@ -78,6 +80,8 @@ export function ProyectosPage() {
   const [selectedLocation, setSelectedLocation] = useState('Todas');
   const [selectedGenero, setSelectedGenero] = useState<GeneroFilter>('Todos');
   const [selectedClasificacion, setSelectedClasificacion] = useState(CLASIFICACION_TODAS);
+  // Origen (reporte CSS / solo PDF / app / interno): solo filtra la vista, no oculta nada por defecto.
+  const [selectedOrigen, setSelectedOrigen] = useState(ORIGEN_TODOS);
   const [sortBy] = useState<'recentes' | 'titulo' | 'ubicacion'>('recentes');
   const [projectsData, setProjectsData] = useState<Proyecto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +113,7 @@ export function ProyectosPage() {
     hombres: project.hombres,
     mujeres: project.mujeres,
     clasificaciones: project.clasificaciones ?? [],
+    origen: origenProyecto(project),
   });
 
   async function fetchProjects() {
@@ -163,6 +168,12 @@ export function ProyectosPage() {
 
   const statusOptions = ['Todos', 'Activo', 'En progreso', 'Cerrado'];
   const clasificacionOptions = [CLASIFICACION_TODAS, ...PROJECT_CLASIFICACIONES.map((c) => PROJECT_CLASIFICACION_LABELS[c])];
+  // Solo los orígenes presentes (p. ej. no se ofrece "Creado en la app" si no hay ninguno).
+  const origenOptions = [ORIGEN_TODOS, ...ORIGENES.filter((o) => projectsData.some((p) => p.origen === o)).map((o) => ORIGEN_PROYECTO_LABELS[o])];
+  // Referencia del reporte oficial (null si el backend aún no informa el origen).
+  const totalReporteCss = projectsData.some((p) => p.origen !== undefined)
+    ? projectsData.filter((p) => p.origen === 'REPORTE_CSS').length
+    : null;
   const selectedClasificacionCode = PROJECT_CLASIFICACIONES.find(
     (c) => PROJECT_CLASIFICACION_LABELS[c] === selectedClasificacion,
   );
@@ -190,7 +201,10 @@ export function ProyectosPage() {
         !selectedClasificacionCode || (project.clasificaciones ?? []).includes(selectedClasificacionCode);
       // Género: proyectos con al menos una participación de ese grupo ("Otros" = sin género registrado).
       const matchesGenero = selectedGenero === 'Todos' || conteoGeneroProyecto(project)[selectedGenero] > 0;
-      return matchesQuery && matchesFaculty && matchesStatus && matchesLocation && matchesClasificacion && matchesGenero;
+      const matchesOrigen = selectedOrigen === ORIGEN_TODOS
+        || (project.origen !== undefined && ORIGEN_PROYECTO_LABELS[project.origen] === selectedOrigen);
+      return matchesQuery && matchesFaculty && matchesStatus && matchesLocation && matchesClasificacion && matchesGenero
+        && matchesOrigen;
     })
     .sort((a, b) => {
       if (sortBy === 'titulo') return a.titulo.localeCompare(b.titulo);
@@ -248,6 +262,9 @@ export function ProyectosPage() {
             onChange={setSelectedClasificacion}
           />
           <FilterGroup title="Ubicación" options={locationOptions} selected={selectedLocation} onChange={setSelectedLocation} />
+          {totalReporteCss !== null ? (
+            <FilterGroup title="Origen" options={origenOptions} selected={selectedOrigen} onChange={setSelectedOrigen} />
+          ) : null}
           <FilterGroup
             title="Género"
             options={[...GENERO_FILTERS]}
@@ -268,6 +285,11 @@ export function ProyectosPage() {
             <div className="list-meta">
               <span>
                 Mostrando <strong>{filteredProjects.length}</strong> de {projectsData.length} proyectos
+                {totalReporteCss !== null ? (
+                  <span title="Proyectos que vienen en la Memoria de Labores del CSS. Los demás se muestran igual: tienen estudiantes, horas o son internos.">
+                    {' '}· <strong>{totalReporteCss}</strong> del reporte CSS
+                  </span>
+                ) : null}
                 {selectedGenero !== 'Todos' ? (
                   <> · <strong>{filteredProjects.reduce((n, p) => n + conteoGeneroProyecto(p)[selectedGenero], 0)}</strong>{' '}
                     participaciones de {selectedGenero.toLowerCase()}{selectedGenero === 'Otros' ? ' (sin género registrado)' : ''}</>
