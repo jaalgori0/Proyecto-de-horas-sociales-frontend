@@ -24,7 +24,32 @@ export type Proyecto = {
   equipo: string[];
   /** Códigos de clasificación (SS_INTERNO, SS_EXTERNO, PROFESIONALIZANTE, CONTACTO_REALIDAD). */
   clasificaciones?: string[];
+  /** De dónde viene el proyecto (ver origenProyecto). Solo informa: nunca oculta el proyecto. */
+  origen?: OrigenProyecto;
 };
+
+/**
+ * Origen de un proyecto respecto al reporte oficial del CSS («Memoria de Labores»):
+ *  - REPORTE_CSS: viene en el Excel CSS (en_reporte_css).
+ *  - SOLO_PDF: tiene correlativo del CSS pero solo aparece en los reportes de horas (PDF).
+ *  - APP: creado en la app (sin correlativo del CSS).
+ *  - INTERNO: proyecto de sistema (asignaciones manuales / convalidaciones).
+ */
+export type OrigenProyecto = 'REPORTE_CSS' | 'SOLO_PDF' | 'APP' | 'INTERNO';
+
+export const ORIGEN_PROYECTO_LABELS: Record<OrigenProyecto, string> = {
+  REPORTE_CSS: 'Reporte CSS',
+  SOLO_PDF: 'Solo en PDF',
+  APP: 'Creado en la app',
+  INTERNO: 'Interno',
+};
+
+export function origenProyecto(p: { enReporteCss?: boolean; esSistema?: boolean; correlativoCss?: string | null }): OrigenProyecto | undefined {
+  if (p.enReporteCss === undefined && p.esSistema === undefined) return undefined; // backend anterior
+  if (p.esSistema) return 'INTERNO';
+  if (p.enReporteCss) return 'REPORTE_CSS';
+  return p.correlativoCss ? 'SOLO_PDF' : 'APP';
+}
 
 export type Institucion = {
   id: string;

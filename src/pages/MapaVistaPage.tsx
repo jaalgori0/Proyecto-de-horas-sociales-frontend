@@ -2,7 +2,7 @@ import { CalendarDays, ChevronLeft, MapPinned, Users, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clasificacionEstado } from '../data/proyectos';
-import type { ProyectoMapa } from '../types';
+import { origenProyecto, type ProyectoMapa } from '../types';
 import { Notice } from '../components/ui';
 import {
   describeApiError,
@@ -337,6 +337,7 @@ export default function MapaVistaPage() {
           municipio: project.municipio,
           // Solo cuenta como "en el mapa" si el frontend tiene las coordenadas del departamento.
           enMapa: Boolean(project.enMapa && coordenadasDepartamentos[project.departamento]),
+          origen: origenProyecto(project),
         }));
 
         // ─── Validación de coordenadas: lo que no tenga ubicación se reporta (no se inventa).
@@ -786,7 +787,15 @@ export default function MapaVistaPage() {
           <div className="projects-list-container">
             <div className="section-header">
               {/* La lista incluye proyectos de todos los estados (cada tarjeta muestra el suyo). */}
-              <h2 className="sidebar-title">Proyectos{!loadingData && !loadError ? ` (${projects.length})` : ''}</h2>
+              <h2 className="sidebar-title">
+                Proyectos{!loadingData && !loadError ? ` (${projects.length})` : ''}
+              </h2>
+              {!loadingData && !loadError && projects.some((p) => p.origen !== undefined) ? (
+                <p className="muted" style={{ margin: '2px 0 0', fontSize: '0.85rem' }}
+                  title="Se muestran todos los proyectos (también los que solo aparecen en los reportes de horas y el interno)">
+                  {projects.filter((p) => p.origen === 'REPORTE_CSS').length} del reporte CSS
+                </p>
+              ) : null}
             </div>
 
             {lugarSeleccionado && !loadingData && !loadError ? (
