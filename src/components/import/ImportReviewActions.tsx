@@ -195,9 +195,14 @@ export default function ImportReviewActions({ item, items, review }: { item: Imp
   const candidatosApp = item.entidad === 'PROYECTO' && Array.isArray(d.candidatosApp)
     ? (d.candidatosApp as Array<{ id: string; titulo: string; estado: string }>)
     : [];
+  // Proyectos del reporte CSS con el mismo título en la institución (migración 016).
+  const candidatosReporte = item.entidad === 'PROYECTO' && Array.isArray(d.candidatosReporte)
+    ? (d.candidatosReporte as Array<{ id: string; titulo: string; correlativo: string; estado: string }>)
+    : [];
   const vinculo = (d.vinculo ?? null) as { decision: ImportProjectLinkDecision; projectId: string | null } | null;
+  const hayCandidatos = candidatosApp.length > 0 || candidatosReporte.length > 0;
 
-  if (rowId === null && !admiteDecision && candidatosApp.length === 0) return null;
+  if (rowId === null && !admiteDecision && !hayCandidatos) return null;
 
   const justificar = (titulo: string, sugerida: string, run: (j: string) => Promise<boolean>, peligro = false) =>
     setModo({ tipo: 'justificar', titulo, sugerida, run, peligro });
@@ -231,9 +236,20 @@ export default function ImportReviewActions({ item, items, review }: { item: Imp
           <Link2 size={16} /> Vincular a «{c.titulo}»
         </button>
       ))}
-      {candidatosApp.length > 0 ? (
+      {candidatosReporte.map((c) => (
+        <button key={c.id} type="button" className="secondary-btn"
+          disabled={review.busy || (vinculo?.decision === 'ALIAS' && vinculo.projectId === c.id)}
+          title="El CSS reporta este proyecto con otro correlativo: las participaciones se cargan en el proyecto del reporte y no se crea una copia"
+          onClick={() => justificar(`Es el proyecto ${c.correlativo} del reporte CSS`,
+            `Mismo proyecto que el correlativo ${c.correlativo} del reporte CSS (confirmado con el CSS).`,
+            (j) => review.onLink(item.clave, 'ALIAS', c.id, j))}>
+          <Link2 size={16} /> Es el proyecto {c.correlativo} del reporte CSS
+        </button>
+      ))}
+      {hayCandidatos ? (
         <button type="button" className="secondary-btn" disabled={review.busy || vinculo?.decision === 'CREAR_NUEVO'}
-          onClick={() => justificar('Crear un proyecto nuevo', 'Es un proyecto distinto del que existe en la app.',
+          onClick={() => justificar('Crear un proyecto nuevo',
+            candidatosReporte.length > 0 ? 'Es un proyecto distinto del que figura en el reporte CSS.' : 'Es un proyecto distinto del que existe en la app.',
             (j) => review.onLink(item.clave, 'CREAR_NUEVO', null, j))}>
           <PlusCircle size={16} /> Es otro proyecto: crear nuevo
         </button>

@@ -1,8 +1,16 @@
 import { MapPin, Users, Clock, ChevronRight, UserPlus, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { Proyecto } from '../types';
+import { ORIGEN_PROYECTO_LABELS, type OrigenProyecto, type Proyecto } from '../types';
 import { AvatarGroup } from './ui';
 import { PROJECT_CLASIFICACION_LABELS, type ProjectClasificacion } from '../services/api';
+
+/** Explicación del origen (tooltip de la etiqueta). Ninguno es un registro inválido. */
+const ORIGEN_TITULOS: Record<OrigenProyecto, string> = {
+  REPORTE_CSS: 'Viene en el reporte oficial del CSS (Memoria de Labores)',
+  SOLO_PDF: 'Tiene estudiantes en los reportes de horas (PDF), pero no figura en la Memoria de Labores del CSS',
+  APP: 'Creado en la app; aún sin correlativo del CSS',
+  INTERNO: 'Proyecto interno del sistema para asignaciones manuales y convalidaciones',
+};
 
 // ─── Estado badge colors ──────────────────────────────────────────────────────
 const estadoConfig: Record<string, { label: string; color: string; bg: string; dot: string }> = {
@@ -182,9 +190,14 @@ export function ProjectListCard({
           {project.titulo}
         </h2>
 
-        {project.clasificaciones?.length ? (
-          <div className="classification-tags" aria-label="Clasificación del proyecto">
-            {project.clasificaciones.map((code) => (
+        {project.clasificaciones?.length || project.origen ? (
+          <div className="classification-tags" aria-label="Clasificación y origen del proyecto">
+            {project.origen ? (
+              <span className={`origin-tag origin-${project.origen.toLowerCase()}`} title={ORIGEN_TITULOS[project.origen]}>
+                {ORIGEN_PROYECTO_LABELS[project.origen]}
+              </span>
+            ) : null}
+            {(project.clasificaciones ?? []).map((code) => (
               <span key={code} className="classification-tag">
                 {PROJECT_CLASIFICACION_LABELS[code as ProjectClasificacion] ?? code}
               </span>

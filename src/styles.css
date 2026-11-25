@@ -5174,6 +5174,20 @@ select.field-input:focus {
   white-space: nowrap;
 }
 
+/* Origen del proyecto respecto al reporte oficial del CSS (solo informa, no oculta). */
+.origin-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.origin-tag.origin-reporte_css { background: #e7f8f1; color: #0f7a57; border-color: #bfe9d7; }
+.origin-tag.origin-solo_pdf    { background: #fff6e5; color: #9a5b00; border-color: #f6dca8; }
+.origin-tag.origin-app         { background: #f1f3f7; color: #4b5563; border-color: #dfe3ea; }
+.origin-tag.origin-interno     { background: #f3eefe; color: #6b46c1; border-color: #ddd0fb; }
+
 /* ─── Aviso de nombre equivalente (409 PROYECTO_SIMILAR / INSTITUCION_SIMILAR) ─── */
 .similar-notice {
   display: flex;

@@ -103,6 +103,14 @@ const motivoLabels: Record<string, string> = {
   vinculado_en_revision: 'Vinculado en la revisión a un proyecto de la app',
   se_crea_aunque_existe_en_app: 'Se crea aunque existe uno parecido en la app (confirmado)',
   similar_a_proyecto_importado: 'Parecido a un proyecto ya importado con otro correlativo',
+  // Correlativos alternos del reporte CSS — migración 016
+  requiere_decidir_correlativo_alterno:
+    'Mismo título que un proyecto del reporte CSS de esta institución: confirme si es ese proyecto o uno distinto',
+  correlativo_alterno_titulo_difiere:
+    'Este correlativo está registrado como alterno de otro proyecto y el título no coincide: revisar con el CSS',
+  se_registra_correlativo_alterno_de: 'Se registrará como correlativo alterno del proyecto del reporte CSS',
+  participacion_repetida_por_correlativo_alterno:
+    'El estudiante aparece dos veces en el mismo proyecto (un correlativo es alterno del otro)',
   fila_excluida_en_revision: 'Fila excluida en la revisión',
   celda_dividida_por_posicion: 'Celda separada por posición (revisar)',
   fila_cortada_entre_paginas: 'Fila cortada entre páginas',
@@ -177,7 +185,9 @@ export function motivoTone(motivo: string): 'warn' | 'danger' | 'info' {
   if (code === 'finaliza_en_reporte' || code.startsWith('decision_') || code === 'fila_editada_en_revision' || code === 'fila_excluida_en_revision') return 'info';
   if (code === 'retroceso_de_estado' || code === 'horas_disminuyen') return 'danger';
   if (code === 'requiere_vincular_proyecto_app' || code === 'vinculo_repetido' || code === 'varias_instituciones_app_similares'
-      || code === 'institucion_app_similar_repetida_en_lote') return 'danger';
+      || code === 'institucion_app_similar_repetida_en_lote' || code === 'requiere_decidir_correlativo_alterno'
+      || code === 'participacion_repetida_por_correlativo_alterno') return 'danger';
+  if (code === 'se_registra_correlativo_alterno_de') return 'info';
   if (code === 'vinculado_en_revision' || code === 'adopta_institucion_nombre_similar' || code === 'titulo_similar_no_identico') return 'info';
   if (code.endsWith('_difieren') || code.endsWith('_difiere') || code.includes('conflicto') || code.includes('invalid')) return 'danger';
   return 'warn';
@@ -330,6 +340,13 @@ export function compareItem(item: ImportItem): ComparisonRow[] {
         row('Alumnos (reporte CSS)', text(d.alumnosCss), base(e?.alumnosCss)),
         ...(Array.isArray(d.candidatosApp) && d.candidatosApp.length > 0
           ? [row('Coincide en la app con', (d.candidatosApp as Array<{ titulo: string }>).map((c) => c.titulo).join(' · '), null)]
+          : []),
+        ...(Array.isArray(d.candidatosReporte) && d.candidatosReporte.length > 0
+          ? [row('Mismo título en el reporte CSS', (d.candidatosReporte as Array<{ titulo: string; correlativo: string }>)
+              .map((c) => `${c.titulo} (correlativo ${c.correlativo})`).join(' · '), null)]
+          : []),
+        ...(d.correlativoAlterno && typeof d.correlativoAlterno === 'object'
+          ? [row('Correlativo alterno de', `correlativo ${(d.correlativoAlterno as { correlativo: string }).correlativo} del reporte CSS`, null)]
           : []),
         ...(Array.isArray(d.similaresImportados) && d.similaresImportados.length > 0
           ? [row('Parecido a importados', (d.similaresImportados as Array<{ titulo: string; correlativo: string }>)

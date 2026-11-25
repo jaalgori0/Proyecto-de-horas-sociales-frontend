@@ -24,6 +24,8 @@ import {
   getGenderSummaryAPI,
   getFaculties,
   getCompletaron600,
+  getDashboardAnios,
+  type AnioFiltro,
   type Completaron600Response,
   type DashboardSummaryResponse,
   type GenderSummaryResponse,
@@ -61,6 +63,16 @@ const TOTAL_SECCIONES = 12;
 const BAR_ROW_PX = 30;
 const barChartHeight = (rows: number, min = 220) => Math.max(min, rows * BAR_ROW_PX + 60);
 
+/** Texto del filtro general de año: "2026" o "todos los años". */
+const textoAnio = (anio: AnioFiltro) => (anio === 'todos' ? 'todos los años' : String(anio));
+/** Sufijo para etiquetas de tarjetas: " 2026" con un año; "" en todos los años. */
+const sufijoAnio = (anio: AnioFiltro) => (anio === 'todos' ? '' : ` ${anio}`);
+
+/** Columna `todos` de /dashboard/carrera-anio: total por carrera sin separar por año. */
+function todosPorCarrera(rows: CarreraAnioRow[]): Record<string, number> {
+  return Object.fromEntries(rows.map((row) => [row.carrera, Number(row.todos ?? 0)]));
+}
+
 /**
  * Filas de /dashboard/carrera-anio: { carrera, facultad, '2025': n, ... }.
  * Se dejan solo `carrera` y las columnas de año (4 dígitos) para que el selector
@@ -88,15 +100,30 @@ function useMetrics(
   apiTendencia: TrendYearRow[],
   apiGenero: GenderSummaryResponse | null,
   apiProyectosMunicipio: ProyectosMunicipioRow[],
+  anio: AnioFiltro,
 ) {
   return useMemo(() => {
     const totalEstudiantesExterno = apiSummary?.totalStudentsExternal ?? 0;
-    // Mismo criterio que el resto de métricas del año: activos + finalizados de anioExternos.
-    const anioExternos = apiSummary?.anioExternos ?? new Date().getFullYear();
+    // Mismo criterio que el resto de métricas: participaciones asignadas en el año seleccionado.
     const inscripcionesExterno = apiSummary?.totalEnrollmentsExternal;
-    const externosSub = `Activos y finalizados ${anioExternos}` +
+    const externosSub = (anio === 'todos' ? 'Activos y finalizados, todos los años' : `Activos y finalizados ${anio}`) +
       (inscripcionesExterno != null ? ` · ${inscripcionesExterno} participaciones` : '');
-    const totalProyectos = apiSummary?.totalProjects ?? apiProjects.length;
+    // Número principal = proyectos del reporte oficial CSS («Memoria de Labores»), que es el
+    // que rige para el área. Los que solo aparecen en los PDF de horas se conservan en la base
+    // (con sus estudiantes y horas) y se informan aparte, sin sumar al número principal.
+    // Sin desglose (backend anterior) se muestra el total del sistema.
+    const proyectosCss = apiSummary?.totalProjectsReporteCss;
+    const proyectosSinCss = apiSummary?.totalProjectsSinReporteCss;
+    const totalProyectosSistema = apiSummary?.totalProjects ?? apiProjects.length;
+    const hayDesglose = proyectosCss != null && proyectosSinCss != null;
+    const totalProyectos = hayDesglose ? proyectosCss : totalProyectosSistema;
+    // En pantalla solo la fuente; el desglose (solo en PDF, total del sistema) queda en el tooltip.
+    const proyectosSub = hayDesglose ? 'Reporte oficial CSS' : 'Todas las instituciones';
+    const proyectosHint = hayDesglose
+      ? `${proyectosCss} proyectos en la Memoria de Labores (reporte oficial CSS). ` +
+        `Además, ${proyectosSinCss} proyectos aparecen solo en los reportes de horas (PDF): se conservan ` +
+        `con sus estudiantes y horas, pero no suman aquí. Total en el sistema: ${totalProyectosSistema}.`
+      : undefined;
     const totalInstituciones = apiSummary?.totalInstitutions ?? apiInstitutions.length;
 
     // Req 2 — Género: endpoint dedicado; si no, el del summary; si no, los marcadores reales.
@@ -121,18 +148,20 @@ function useMetrics(
     const tendenciaAnual = apiTendencia.length > 0 ? apiTendencia : (apiSummary?.trendByYear ?? []);
 
     return {
-      totalEstudiantesExterno, externosSub, totalProyectos, totalInstituciones,
+      totalEstudiantesExterno, externosSub, totalProyectos, totalProyectosSistema, proyectosSub, proyectosHint, totalInstituciones,
       totalMunicipios, totalHombres, totalMujeres, totalSinGenero,
       generoData, metricasPorInstitucion, tendenciaAnual,
     };
-  }, [apiProjects, apiInstitutions, apiMarkers, apiSummary, apiInstitucionTabla, apiTendencia, apiGenero, apiProyectosMunicipio]);
+  }, [apiProjects, apiInstitutions, apiMarkers, apiSummary, apiInstitucionTabla, apiTendencia, apiGenero, apiProyectosMunicipio, anio]);
 }
 
 // exportToExcel está en src/utils/exportExcel.ts — importado arriba como exportToExcelFormatted
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
-function KpiCard({ icon, label, value, sub, color }: {
-  icon: React.ReactNode; label: string; value: string | number; sub?: string; color: string;
+function KpiCard({ icon, label, value, sub, subHint, color }: {
+  icon: React.ReactNode; label: string; value: string | number; sub?: string;
+  /** Texto completo del subtítulo (tooltip) cuando `sub` es una versión abreviada. */
+  subHint?: string; color: string;
 }) {
   return (
     <div className="dash-kpi-card" style={{ '--kpi-color': color } as React.CSSProperties}>
@@ -140,7 +169,7 @@ function KpiCard({ icon, label, value, sub, color }: {
       <div className="dash-kpi-body">
         <span className="dash-kpi-label">{label}</span>
         <strong className="dash-kpi-value">{value}</strong>
-        {sub && <span className="dash-kpi-sub">{sub}</span>}
+        {sub && <span className="dash-kpi-sub" title={subHint}>{sub}</span>}
       </div>
     </div>
   );
@@ -194,45 +223,30 @@ const CARRERA_METRICAS: Record<CarreraAnioMetrica, { tab: string; serie: string;
   },
 };
 
-function CarrerasChart({ estudiantes, participaciones }: {
+// Sigue el filtro general de año: un año = esa columna; todos = `todos` del backend
+// (en estudiantes, personas distintas en todo el historial; no la suma de los años).
+function CarrerasChart({ estudiantes, participaciones, todosEstudiantes, todosParticipaciones, anio }: {
   estudiantes: CarreraAnioRow[];
   participaciones: CarreraAnioRow[];
+  todosEstudiantes: Record<string, number>;
+  todosParticipaciones: Record<string, number>;
+  anio: AnioFiltro;
 }) {
   const [metrica, setMetrica] = useState<CarreraAnioMetrica>('estudiantes');
   const source = metrica === 'estudiantes' ? estudiantes : participaciones;
+  const todos = metrica === 'estudiantes' ? todosEstudiantes : todosParticipaciones;
   const labels = CARRERA_METRICAS[metrica];
 
-  // Calcula dinámicamente qué años existen en los datos (solo claves de 4 dígitos)
-  const availableYears = useMemo(() => {
-    const yearsSet = new Set<string>();
-    source.forEach((row) => {
-      Object.keys(row).forEach((key) => {
-        if (/^\d{4}$/.test(key)) yearsSet.add(key);
-      });
-    });
-    return Array.from(yearsSet).sort();
-  }, [source]);
-
-  const [anio, setAnio] = useState<string>(availableYears[availableYears.length - 1] ?? '');
-
-  // Si los datos cambian (ej: llegan del backend) y el año seleccionado ya no existe,
-  // selecciona el más reciente disponible
-  useEffect(() => {
-    if (availableYears.length > 0 && !availableYears.includes(anio)) {
-      setAnio(availableYears[availableYears.length - 1]);
-    }
-  }, [availableYears, anio]);
-
   const data = source
-    .map((d) => ({ carrera: d.carrera, alumnos: Number(d[anio] ?? 0) }))
+    .map((d) => ({ carrera: d.carrera, alumnos: anio === 'todos' ? (todos[d.carrera] ?? 0) : Number(d[String(anio)] ?? 0) }))
     .sort((a, b) => b.alumnos - a.alumnos);
-  // Cada estudiante tiene una sola carrera: la suma de la columna es el total exacto del año.
+  // Cada estudiante tiene una sola carrera: la suma de la columna es el total exacto.
   const totalAnio = data.reduce((sum, d) => sum + d.alumnos, 0);
 
   return (
     <ChartCard
-      title="Alumnos en Horas Sociales por Carrera y Año"
-      subtitle="Número de estudiantes realizando horas sociales, filtrando por año académico"
+      title="Alumnos en Horas Sociales por Carrera"
+      subtitle={`Estudiantes con participaciones asignadas en ${textoAnio(anio)}, por carrera`}
       exportId="chart-carreras"
       headerExtra={
         <div className="dash-metric-bar">
@@ -250,22 +264,13 @@ function CarrerasChart({ estudiantes, participaciones }: {
               </button>
             ))}
           </div>
-          {anio ? (
-            <p className="dash-metric-total">
-              Total {anio}: <strong>{totalAnio.toLocaleString('es-SV')}</strong> {labels.total}
-            </p>
-          ) : null}
+          <p className="dash-metric-total">
+            Total {textoAnio(anio)}: <strong>{totalAnio.toLocaleString('es-SV')}</strong> {labels.total}
+          </p>
         </div>
       }
     >
-      {source.length === 0 ? <p className="empty-chart">{labels.vacio}</p> : null}
-      <div className="dash-year-selector">
-        {availableYears.map((y) => (
-          <button key={y} type="button" className={`dash-year-btn ${anio === y ? 'active' : ''}`} onClick={() => setAnio(y)}>
-            {y}
-          </button>
-        ))}
-      </div>
+      {source.length === 0 || totalAnio === 0 ? <p className="empty-chart">{labels.vacio}</p> : null}
       <ResponsiveContainer width="100%" height={barChartHeight(data.length, 280)}>
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 28, left: 96, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
@@ -284,7 +289,7 @@ function CarrerasChart({ estudiantes, participaciones }: {
 // Req 2 — Género, con filtro por facultad
 const TODAS_LAS_FACULTADES = '';
 
-function GeneroChart({ general }: { general: { hombres: number; mujeres: number; sinDato: number } }) {
+function GeneroChart({ general, anio }: { general: { hombres: number; mujeres: number; sinDato: number }; anio: AnioFiltro }) {
   const [faculties, setFaculties] = useState<FacultyResponse[]>([]);
   const [facultyId, setFacultyId] = useState<string>(TODAS_LAS_FACULTADES);
   const [filtrado, setFiltrado] = useState<{ hombres: number; mujeres: number; sinDato: number } | null>(null);
@@ -307,7 +312,7 @@ function GeneroChart({ general }: { general: { hombres: number; mujeres: number;
     let active = true;
     setCargando(true);
     setError('');
-    getGenderSummaryAPI(facultyId)
+    getGenderSummaryAPI(facultyId, anio)
       .then((g) => {
         if (active) setFiltrado({ hombres: g.hombres ?? 0, mujeres: g.mujeres ?? 0, sinDato: Number(g.sinDato ?? 0) });
       })
@@ -320,7 +325,7 @@ function GeneroChart({ general }: { general: { hombres: number; mujeres: number;
     return () => {
       active = false;
     };
-  }, [facultyId]);
+  }, [facultyId, anio]);
 
   const datos = filtrado ?? general;
   const total = datos.hombres + datos.mujeres;
@@ -338,8 +343,8 @@ function GeneroChart({ general }: { general: { hombres: number; mujeres: number;
       title="Hombres y Mujeres en Horas Sociales"
       subtitle={
         facultadNombre
-          ? `Distribución por género de los estudiantes de ${facultadNombre}`
-          : 'Distribución por género de los estudiantes en servicio social externo'
+          ? `Distribución por género de los estudiantes de ${facultadNombre} (${textoAnio(anio)})`
+          : `Distribución por género de los estudiantes en servicio social externo (${textoAnio(anio)})`
       }
       exportId="chart-genero"
       headerExtra={
@@ -403,11 +408,14 @@ function GeneroChart({ general }: { general: { hombres: number; mujeres: number;
 }
 
 // Participantes del año que completaron las 600 horas (historial acumulado al cierre del año)
-function Completaron600Card() {
+// Métrica anual: con un año en el filtro general usa ese año; con "todos los años"
+// muestra su propio selector (no existe un "completaron" sin año de referencia).
+function Completaron600Card({ anioGlobal }: { anioGlobal: AnioFiltro }) {
   const [faculties, setFaculties] = useState<FacultyResponse[]>([]);
   const [facultyId, setFacultyId] = useState<string>(TODAS_LAS_FACULTADES);
   /** '' = el backend elige el año más reciente con participantes. */
-  const [anio, setAnio] = useState<string>('');
+  const [anioPropio, setAnio] = useState<string>('');
+  const anio = anioGlobal === 'todos' ? anioPropio : String(anioGlobal);
   const [datos, setDatos] = useState<Completaron600Response | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -426,8 +434,8 @@ function Completaron600Card() {
     getCompletaron600(anio || undefined, facultyId || undefined)
       .then((r) => {
         if (!active) return;
-        // Si el año elegido no tiene participantes en la facultad nueva, se pasa al más reciente.
-        if (anio && r.anios.length > 0 && !r.anios.includes(Number(anio))) {
+        // Selector propio: si el año elegido no tiene participantes en la facultad nueva, se pasa al más reciente.
+        if (anioGlobal === 'todos' && anio && r.anios.length > 0 && !r.anios.includes(Number(anio))) {
           setAnio(String(r.anios[r.anios.length - 1]));
           return;
         }
@@ -442,7 +450,7 @@ function Completaron600Card() {
     return () => {
       active = false;
     };
-  }, [anio, facultyId, reintento]);
+  }, [anio, anioGlobal, facultyId, reintento]);
 
   const anioActual = datos?.anio != null ? String(datos.anio) : '';
   const requisito = datos?.requisito ?? 600;
@@ -451,7 +459,7 @@ function Completaron600Card() {
   return (
     <ChartCard
       title={`Estudiantes que Completaron las ${requisito} Horas`}
-      subtitle={`De las personas que realizaron horas sociales en el año seleccionado${facultadNombre ? ` (${facultadNombre})` : ''}, cuántas completaron el requisito según su historial acumulado hasta el cierre de ese año`}
+      subtitle={`De las personas que realizaron horas sociales en ${anioActual || 'el año seleccionado'}${facultadNombre ? ` (${facultadNombre})` : ''}, cuántas completaron el requisito según su historial acumulado hasta el cierre de ese año${anioGlobal === 'todos' ? '. Métrica anual: elige el año' : ''}`}
       exportId="chart-completaron-600"
       headerExtra={
         <div className="dash-metric-bar">
@@ -489,6 +497,7 @@ function Completaron600Card() {
         <p className="empty-chart">No hay participaciones registradas para mostrar.</p>
       ) : (
         <>
+          {anioGlobal === 'todos' ? (
           <div className="dash-year-selector">
             {datos.anios.map((y) => (
               <button
@@ -502,6 +511,7 @@ function Completaron600Card() {
               </button>
             ))}
           </div>
+          ) : null}
           <div className="dash-kpi-grid" style={{ marginBottom: 16 }}>
             <KpiCard icon={<Users size={22} />} label={`Participantes ${anioActual}`} value={datos.participantes} sub="Realizaron horas sociales ese año" color={C.blue} />
             <KpiCard icon={<Award size={22} />} label={`Completaron ${requisito} h`} value={datos.completaron} sub={`${datos.porcentaje}% de los participantes`} color={C.green} />
@@ -562,7 +572,7 @@ const MultiProyectoTooltip = ({ active, payload }: any) => {
   );
 };
 
-function MultiProyectoChart({ data }: { data: EstudianteMultiProyectoRow[] }) {
+function MultiProyectoChart({ data, anio }: { data: EstudianteMultiProyectoRow[]; anio: AnioFiltro }) {
   // Etiqueta del eje: nombre + carnet (dos estudiantes pueden llamarse igual).
   const rows = data.map((r) => ({ ...r, etiqueta: `${r.nombre} (${r.carnet})` }));
   return (
@@ -570,13 +580,13 @@ function MultiProyectoChart({ data }: { data: EstudianteMultiProyectoRow[] }) {
       title="Estudiantes en Varios Proyectos"
       subtitle={
         data.length > 0
-          ? `${data.length} estudiante${data.length === 1 ? '' : 's'} con 2 o más proyectos (historial completo, activos y finalizados) y la cantidad exacta de proyectos de cada uno`
-          : 'Estudiantes con 2 o más proyectos (historial completo, activos y finalizados)'
+          ? `${data.length} estudiante${data.length === 1 ? '' : 's'} con 2 o más proyectos (participaciones asignadas en ${textoAnio(anio)}, activas y finalizadas) y la cantidad exacta de proyectos de cada uno`
+          : `Estudiantes con 2 o más proyectos (participaciones asignadas en ${textoAnio(anio)}, activas y finalizadas)`
       }
       exportId="chart-multiproyecto"
     >
       {rows.length === 0 ? (
-        <p className="empty-chart">Ningún estudiante participa en más de un proyecto.</p>
+        <p className="empty-chart">Ningún estudiante participa en más de un proyecto en {textoAnio(anio)}.</p>
       ) : (
         <ResponsiveContainer width="100%" height={barChartHeight(rows.length)}>
           <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 40, left: 8, bottom: 4 }}>
@@ -609,6 +619,8 @@ export default function DashboardPage() {
   const [apiSummary, setApiSummary] = useState<DashboardSummaryResponse | null>(null);
   const [apiCarreraAnio, setApiCarreraAnio] = useState<CarreraAnioRow[]>([]);
   const [apiCarreraAnioParticipaciones, setApiCarreraAnioParticipaciones] = useState<CarreraAnioRow[]>([]);
+  const [todosCarrera, setTodosCarrera] = useState<Record<string, number>>({});
+  const [todosCarreraParticipaciones, setTodosCarreraParticipaciones] = useState<Record<string, number>>({});
   const [apiEstudiantesMunicipio, setApiEstudiantesMunicipio] = useState<EstudiantesMunicipioRow[]>([]);
   const [apiProyectosMunicipio, setApiProyectosMunicipio] = useState<ProyectosMunicipioRow[]>([]);
   const [apiInstitucionTabla, setApiInstitucionTabla] = useState<TablaInstitucionRow[]>([]);
@@ -619,8 +631,13 @@ export default function DashboardPage() {
   // Secciones cuya carga falló (se muestran en un aviso, sin datos de ejemplo).
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  // Filtro general de año: arranca en el año por defecto del backend (el más reciente con
+  // participaciones). null = todavía no se sabe qué año usar.
+  const [anios, setAnios] = useState<number[]>([]);
+  const [anio, setAnio] = useState<AnioFiltro | null>(null);
+  const anioActivo: AnioFiltro = anio ?? 'todos';
 
-  const metrics = useMetrics(apiProjects, apiInstitutions, apiMarkers, apiSummary, apiInstitucionTabla, apiTendencia, apiGenero, apiProyectosMunicipio);
+  const metrics = useMetrics(apiProjects, apiInstitutions, apiMarkers, apiSummary, apiInstitucionTabla, apiTendencia, apiGenero, apiProyectosMunicipio, anioActivo);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
 
@@ -643,7 +660,26 @@ export default function DashboardPage() {
     [metrics.metricasPorInstitucion]
   );
 
+  // Años disponibles. Si falla, se usa el acumulado (solo queda el botón «Todos los años»).
   useEffect(() => {
+    let active = true;
+    getDashboardAnios()
+      .then((r) => {
+        if (!active) return;
+        setAnios(r.anios);
+        setAnio((actual) => actual ?? r.anioPorDefecto ?? 'todos');
+      })
+      .catch(() => {
+        if (active) setAnio((actual) => actual ?? 'todos');
+      });
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    if (anio === null) return;
+    const anioCarga: AnioFiltro = anio;
     let active = true;
 
     // Cada sección se carga por separado: si una falla, las demás se muestran
@@ -664,16 +700,21 @@ export default function DashboardPage() {
         intentar('Proyectos', getProjects, setApiProjects),
         intentar('Instituciones', getInstitutions, setApiInstitutions),
         intentar('Marcadores del mapa', getMapMarkers, setApiMarkers),
-        intentar('Resumen', getDashboardSummary, setApiSummary),
-        intentar('Alumnos por carrera y año', () => getStudentsByCarreraAndYear('estudiantes'), (rows) => setApiCarreraAnio(sanitizeCarreraAnio(rows))),
-        intentar('Participaciones por carrera y año', () => getStudentsByCarreraAndYear('participaciones'), (rows) =>
-          setApiCarreraAnioParticipaciones(sanitizeCarreraAnio(rows))),
-        intentar('Estudiantes por municipio', getStudentsByMunicipio, setApiEstudiantesMunicipio),
-        intentar('Proyectos por municipio', getProjectsByMunicipio, setApiProyectosMunicipio),
-        intentar('Tabla por institución', getInstitutionDetailTable, setApiInstitucionTabla),
+        intentar('Resumen', () => getDashboardSummary(anioCarga), setApiSummary),
+        intentar('Alumnos por carrera y año', () => getStudentsByCarreraAndYear('estudiantes'), (rows) => {
+          setApiCarreraAnio(sanitizeCarreraAnio(rows));
+          setTodosCarrera(todosPorCarrera(rows));
+        }),
+        intentar('Participaciones por carrera y año', () => getStudentsByCarreraAndYear('participaciones'), (rows) => {
+          setApiCarreraAnioParticipaciones(sanitizeCarreraAnio(rows));
+          setTodosCarreraParticipaciones(todosPorCarrera(rows));
+        }),
+        intentar('Estudiantes por municipio', () => getStudentsByMunicipio(anioCarga), setApiEstudiantesMunicipio),
+        intentar('Proyectos por municipio', () => getProjectsByMunicipio(anioCarga), setApiProyectosMunicipio),
+        intentar('Tabla por institución', () => getInstitutionDetailTable(anioCarga), setApiInstitucionTabla),
         intentar('Tendencia anual', getTrendByYear, setApiTendencia),
-        intentar('Género', () => getGenderSummaryAPI(), setApiGenero),
-        intentar('Estudiantes en varios proyectos', getStudentsInMultipleProjects, setApiMultiProyecto),
+        intentar('Género', () => getGenderSummaryAPI(undefined, anioCarga), setApiGenero),
+        intentar('Estudiantes en varios proyectos', () => getStudentsInMultipleProjects(anioCarga), setApiMultiProyecto),
       ]);
 
       if (!active) return;
@@ -686,7 +727,7 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, anio]);
 
   // Todas las secciones fallaron con el mismo error de conexión → un solo mensaje claro.
   const errorUnico =
@@ -734,6 +775,41 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Filtro general de año (criterio de la Memoria de Labores del CSS) */}
+      <div className="dash-year-filter" role="group" aria-label="Año del dashboard">
+        <div className="dash-year-selector">
+          {anios.map((y) => (
+            <button
+              key={y}
+              type="button"
+              className={`dash-year-btn ${anioActivo === y ? 'active' : ''}`}
+              aria-pressed={anioActivo === y}
+              onClick={() => setAnio(y)}
+            >
+              {y}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`dash-year-btn ${anioActivo === 'todos' ? 'active' : ''}`}
+            aria-pressed={anioActivo === 'todos'}
+            onClick={() => setAnio('todos')}
+          >
+            Todos los años
+          </button>
+        </div>
+        <p className="dash-year-filter-note">
+          {anioActivo === 'todos' ? (
+            <>Mostrando el <strong>acumulado de todos los años</strong>.</>
+          ) : (
+            <>
+              Mostrando <strong>{anioActivo}</strong>: proyectos iniciados, participaciones asignadas y horas registradas
+              en ese año (criterio de la Memoria de Labores del CSS). La tendencia anual siempre muestra todos los años.
+            </>
+          )}
+        </p>
+      </div>
+
       {loading ? <p className="muted">Cargando datos del dashboard...</p> : null}
       {!loading && loadErrors.length > 0 ? (
         <Notice
@@ -758,25 +834,38 @@ export default function DashboardPage() {
       {/* KPIs — incluye el total de externos (Req 6) y el desglose de género (Req 2) */}
       <div className="dash-scroll dash-kpi-scroll">
       <div className="dash-kpi-grid">
-        <KpiCard icon={<UserCheck size={22} />} label="Estudiantes en Servicio Social Externo" value={metrics.totalEstudiantesExterno} sub={metrics.externosSub} color={C.blue} />
-        <KpiCard icon={<BookOpen size={22} />} label="Proyectos Totales" value={metrics.totalProyectos} sub="Todas las instituciones" color={C.green} />
-        <KpiCard icon={<Building2 size={22} />} label="Instituciones Aliadas" value={metrics.totalInstituciones} sub="Públicas y privadas" color={C.purple} />
-        <KpiCard icon={<MapPin size={22} />} label="Municipios con Proyectos" value={metrics.totalMunicipios} sub="Cobertura nacional" color={C.teal} />
-        <KpiCard icon={<Users size={22} />} label="Hombres en Servicio Social" value={metrics.totalHombres} sub={hayGenero ? `${pctH}% del total` : 'Sin datos de género'} color={C.blue} />
-        <KpiCard icon={<GraduationCap size={22} />} label="Mujeres en Servicio Social" value={metrics.totalMujeres} sub={hayGenero ? `${pctM}% del total` : 'Sin datos de género'} color={C.pink} />
+        <KpiCard icon={<UserCheck size={22} />} label={`Estudiantes en Servicio Social Externo${sufijoAnio(anioActivo)}`} value={metrics.totalEstudiantesExterno} sub={metrics.externosSub} color={C.blue} />
+        <KpiCard icon={<BookOpen size={22} />} label={anioActivo === 'todos' ? 'Proyectos (Reporte CSS)' : `Proyectos Iniciados en ${anioActivo}`} value={metrics.totalProyectos} sub={metrics.proyectosSub} subHint={metrics.proyectosHint} color={C.green} />
+        <KpiCard
+          icon={<Building2 size={22} />}
+          label={anioActivo === 'todos' ? 'Instituciones Aliadas' : `Instituciones con Proyectos ${anioActivo}`}
+          value={metrics.totalInstituciones}
+          sub={anioActivo === 'todos' ? 'Públicas y privadas registradas' : 'Con proyectos iniciados en el año'}
+          color={C.purple}
+        />
+        <KpiCard icon={<MapPin size={22} />} label={`Municipios con Proyectos${sufijoAnio(anioActivo)}`} value={metrics.totalMunicipios} sub="Cobertura nacional" color={C.teal} />
+        <KpiCard icon={<Users size={22} />} label={`Hombres en Servicio Social${sufijoAnio(anioActivo)}`} value={metrics.totalHombres} sub={hayGenero ? `${pctH}% del total` : 'Sin datos de género'} color={C.blue} />
+        <KpiCard icon={<GraduationCap size={22} />} label={`Mujeres en Servicio Social${sufijoAnio(anioActivo)}`} value={metrics.totalMujeres} sub={hayGenero ? `${pctM}% del total` : 'Sin datos de género'} color={C.pink} />
       </div>
       </div>
 
       {/* Req 1 — Alumnos por carrera y año */}
-      <CarrerasChart estudiantes={apiCarreraAnio} participaciones={apiCarreraAnioParticipaciones} />
+      <CarrerasChart
+        estudiantes={apiCarreraAnio}
+        participaciones={apiCarreraAnioParticipaciones}
+        todosEstudiantes={todosCarrera}
+        todosParticipaciones={todosCarreraParticipaciones}
+        anio={anioActivo}
+      />
 
       {/* Req 2 — Género + Tendencia anual */}
       <div className="dash-grid-2">
         <GeneroChart
           general={{ hombres: metrics.totalHombres, mujeres: metrics.totalMujeres, sinDato: metrics.totalSinGenero }}
+          anio={anioActivo}
         />
 
-        <ChartCard title="Tendencia Anual de Estudiantes Externos" subtitle="Evolución histórica de la participación en servicio social por año" exportId="chart-tendencia">
+        <ChartCard title="Tendencia Anual de Estudiantes Externos" subtitle="Todos los años: evolución histórica por año (no cambia con el filtro de año)" exportId="chart-tendencia">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={metrics.tendenciaAnual} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
@@ -799,7 +888,7 @@ export default function DashboardPage() {
       ) : null}
 
       {/* Req 3 — Estudiantes por municipio */}
-      <ChartCard title="Número de Estudiantes por Municipio" subtitle="Distribución de estudiantes en servicio social externo según municipio de ejecución del proyecto" exportId="chart-municipios-estudiantes">
+      <ChartCard title="Número de Estudiantes por Municipio" subtitle={`Estudiantes con participaciones asignadas en ${textoAnio(anioActivo)}, según municipio de ejecución del proyecto`} exportId="chart-municipios-estudiantes">
         <ResponsiveContainer width="100%" height={barChartHeight(estudiantesMunicipioData.length)}>
           <BarChart data={estudiantesMunicipioData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
@@ -814,7 +903,7 @@ export default function DashboardPage() {
       </ChartCard>
 
       {/* Req 4 — Proyectos por municipio */}
-       <ChartCard title="Número de Proyectos por Municipio" subtitle="Total de proyectos registrados versus proyectos actualmente activos por municipio" exportId="chart-municipios-proyectos">
+       <ChartCard title="Número de Proyectos por Municipio" subtitle={`Proyectos ${anioActivo === 'todos' ? 'de todos los años' : `iniciados en ${anioActivo}`} versus los activos hoy (estado actual), por municipio`} exportId="chart-municipios-proyectos">
         {/* Dos barras por municipio: más alto por fila. */}
         <ResponsiveContainer width="100%" height={barChartHeight(proyectosMunicipioData.length * 1.5)}>
           <BarChart data={proyectosMunicipioData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
@@ -824,21 +913,21 @@ export default function DashboardPage() {
             <Tooltip content={<CustomTooltip />} />
             <Legend verticalAlign="top" />
             <Bar dataKey="proyectos" name="Total Proyectos" fill={C.purple} radius={[0, 6, 6, 0]} />
-            <Bar dataKey="activos" name="Activos" fill={C.green} radius={[0, 6, 6, 0]} />
+            <Bar dataKey="activos" name="Activos (estado actual)" fill={C.green} radius={[0, 6, 6, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </ChartCard>
 
       {/* Participantes del año que completaron las 600 horas */}
-      <Completaron600Card />
+      <Completaron600Card anioGlobal={anioActivo} />
 
       {/* Estudiantes que participan en varios proyectos */}
-      <MultiProyectoChart data={apiMultiProyecto} />
+      <MultiProyectoChart data={apiMultiProyecto} anio={anioActivo} />
 
       {/* Req 5 — Métricas por institución (gráfico apilado) */}
       <ChartCard
         title="Métricas de Proyectos por Institución"
-        subtitle={`Comparativa de proyectos activos, en progreso y cerrados de las ${metrics.metricasPorInstitucion.length} instituciones aliadas, de más a menos proyectos`}
+        subtitle={`Proyectos ${anioActivo === 'todos' ? 'de todos los años' : `iniciados en ${anioActivo}`} por estado actual (activos, en progreso y cerrados) de ${metrics.metricasPorInstitucion.length} instituciones, de más a menos proyectos`}
         exportId="chart-instituciones"
       >
         {institucionesOrdenadas.length === 0 ? (
@@ -870,7 +959,11 @@ export default function DashboardPage() {
       <div className="dash-chart-card">
         <div className="dash-chart-header">
           <h3 className="dash-chart-title">Tabla Detallada por Institución</h3>
-          <p className="dash-chart-subtitle">Resumen completo incluyendo estudiantes en servicio social externo por institución aliada</p>
+          <p className="dash-chart-subtitle">
+            {anioActivo === 'todos'
+              ? 'Todos los años: proyectos por estado actual y estudiantes en servicio social externo por institución aliada'
+              : `${anioActivo}: proyectos iniciados en el año (por estado actual) y estudiantes con participaciones asignadas en el año, por institución con actividad`}
+          </p>
         </div>
         <div className="dash-table-wrapper dash-scroll">
           <table className="dash-table">
